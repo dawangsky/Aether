@@ -56,18 +56,24 @@ ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/" npm install --registry
 npm run dev
 ```
 
-打包并安装到「应用程序」：
+本地打包并安装到「应用程序」：
 
 ```bash
 cd desktop
 npm run install:local
-# 产物：release/mac-arm64/LQ Terminal.app
-# 同时安装到：/Applications/LQ Terminal.app
-# 也可打开：release/*.dmg
+# 产物：release/mac-arm64/Aether.app
+# 安装到：/Applications/Aether.app
 ```
 
-Electron 启动时会检测 `127.0.0.1:8765`；若未运行则尝试用仓库 `.venv` 拉起 API。  
-打包后可通过环境变量指定仓库：`LOTTERY_ROOT`、`LOTTERY_PYTHON`。
+跨平台安装包由 GitHub Actions 在打 `v*` tag 时自动构建并上传到 [Releases](https://github.com/dawangsky/Aether/releases)：
+
+- macOS：`Aether-*-mac-arm64.dmg` / `Aether-*-mac-x64.dmg`
+- Windows：`Aether-*-win-x64.exe`（NSIS 安装版 + portable）
+
+也可在 Actions 页手动触发 `Release` workflow。
+
+Electron 启动时会检测 `127.0.0.1:8765`；若未运行则尝试拉起内嵌/本地 Python API。  
+可通过环境变量指定：`LOTTERY_ROOT`、`LOTTERY_PYTHON`。打包版会优先使用应用资源目录中的 `backend/`。
 
 ## OpenSpec
 
@@ -79,5 +85,6 @@ Electron 启动时会检测 `127.0.0.1:8765`；若未运行则尝试用仓库 `.
 lottery/           # Python 包（CLI / analysis / api）
 desktop/           # Electron + Vue3 + TS
 data/              # 本地开奖 CSV
+.github/workflows/ # Release 自动打包
 openspec/          # 规格与变更
 ```

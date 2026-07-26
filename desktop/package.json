@@ -10,6 +10,8 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "dist": "npm run build && electron-builder --mac",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:win": "npm run build && electron-builder --win",
     "dist:dir": "npm run build && electron-builder --mac dir",
     "install:local": "npm run dist:dir && rm -rf '/Applications/LQ Terminal.app' '/Applications/AETHER · 量化.app' '/Applications/Aether.app' && cp -R 'release/mac-arm64/Aether.app' /Applications/ && xattr -cr '/Applications/Aether.app' && echo 'Installed: /Applications/Aether.app'"
   },
@@ -34,33 +36,87 @@
       "output": "release",
       "buildResources": "build"
     },
-    "icon": "build/icon.icns",
     "files": [
       "out/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../lottery",
+        "to": "backend/lottery",
+        "filter": [
+          "**/*",
+          "!**/__pycache__/**",
+          "!**/*.pyc",
+          "!**/*.pyo"
+        ]
+      },
+      {
+        "from": "../data",
+        "to": "backend/data",
+        "filter": [
+          "**/*.csv"
+        ]
+      },
+      {
+        "from": "../requirements.txt",
+        "to": "backend/requirements.txt"
+      },
+      {
+        "from": "../pyproject.toml",
+        "to": "backend/pyproject.toml"
+      }
     ],
     "mac": {
       "icon": "build/icon.icns",
       "category": "public.app-category.finance",
       "target": [
         {
-          "target": "dir",
+          "target": "dmg",
           "arch": [
-            "arm64"
+            "arm64",
+            "x64"
           ]
         },
         {
-          "target": "dmg",
+          "target": "zip",
           "arch": [
-            "arm64"
+            "arm64",
+            "x64"
           ]
         }
       ],
       "identity": null,
       "hardenedRuntime": false,
-      "gatekeeperAssess": false
+      "gatekeeperAssess": false,
+      "artifactName": "${productName}-${version}-mac-${arch}.${ext}"
     },
     "dmg": {
-      "title": "Aether"
+      "title": "Aether ${version}"
+    },
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "${productName}-${version}-win-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Aether"
     }
   }
 }
