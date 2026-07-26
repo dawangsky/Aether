@@ -1,6 +1,6 @@
 {
   "name": "lottery-desktop",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "双色球/大乐透量化桌面端",
   "author": "Aether <aether@users.noreply.github.com>",
@@ -68,8 +68,7 @@
         {
           "target": "dmg",
           "arch": [
-            "arm64",
-            "x64"
+            "arm64"
           ]
         }
       ],
