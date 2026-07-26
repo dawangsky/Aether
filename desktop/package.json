@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "双色球/大乐透量化桌面端",
-  "author": "Aether",
+  "author": "Aether <aether@users.noreply.github.com>",
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
@@ -67,7 +67,7 @@
       }
     ],
     "mac": {
-      "icon": "build/icon.icns",
+      "icon": "icon.icns",
       "category": "public.app-category.finance",
       "target": [
         {
@@ -94,7 +94,7 @@
       "title": "Aether ${version}"
     },
     "win": {
-      "icon": "build/icon.ico",
+      "icon": "icon.ico",
       "target": [
         {
           "target": "nsis",
@@ -108,15 +108,18 @@
             "x64"
           ]
         }
-      ],
-      "artifactName": "${productName}-${version}-win-${arch}.${ext}"
+      ]
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Aether"
+      "shortcutName": "Aether",
+      "artifactName": "${productName}-${version}-win-${arch}-setup.${ext}"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-win-${arch}-portable.${ext}"
     }
   }
 }
