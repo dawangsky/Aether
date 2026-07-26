@@ -1,0 +1,16 @@
+schema: spec-driven
+
+context: |
+  双色球/大乐透本地量化系统。技术栈：Python 3.10+（CLI + FastAPI）、Vue3 + TypeScript + Electron。
+  文档与 UI 文案默认中文。开奖随机，禁止承诺中奖率。
+  复用 lottery.analysis / predict / backtest / data，避免复制业务逻辑。
+
+rules:
+  proposal:
+    - 使用中文撰写
+    - 必须包含免责声明相关影响说明
+  design:
+    - 使用中文撰写
+    - 明确 FastAPI 与 Electron 进程关系
+  tasks:
+    - 任务使用 - [ ] 复选框，便于 apply 跟踪

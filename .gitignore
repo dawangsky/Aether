@@ -6,3 +6,7 @@ dist/
 build/
 .DS_Store
 .pytest_cache/
+.idea/
+desktop/node_modules/
+desktop/out/
+desktop/dist/
