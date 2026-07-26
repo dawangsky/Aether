@@ -7,7 +7,7 @@ from typing import Iterable
 
 import requests
 
-from lottery.config import DLT, SSQ, GameConfig, get_game
+from lottery.config import GameConfig, get_game
 from lottery.data.loader import load_draws, merge_draws, save_draws
 from lottery.models import Draw
 
@@ -26,6 +26,18 @@ DLT_URL = (
     "https://webapi.sporttery.cn/gateway/lottery/getHistoryPageListV1.qry"
 )
 
+_LEVEL_NAME = {
+    "一等奖": 1,
+    "二等奖": 2,
+    "三等奖": 3,
+    "四等奖": 4,
+    "五等奖": 5,
+    "六等奖": 6,
+    "七等奖": 7,
+    "八等奖": 8,
+    "九等奖": 9,
+}
+
 
 def _parse_date(raw: str) -> str:
     m = re.search(r"(\d{4}-\d{2}-\d{2})", raw or "")
@@ -35,6 +47,48 @@ def _parse_date(raw: str) -> str:
 def _parse_nums(text: str, sep: str = ",") -> tuple[int, ...]:
     parts = re.split(r"[\s,|]+", text.strip())
     return tuple(int(p) for p in parts if p)
+
+
+def _parse_money(raw: object) -> int | None:
+    if raw is None:
+        return None
+    text = str(raw).strip().replace(",", "").replace("，", "")
+    if not text:
+        return None
+    try:
+        return int(float(text))
+    except ValueError:
+        return None
+
+
+def _prizes_from_ssq(item: dict) -> tuple[tuple[int, int], ...]:
+    out: list[tuple[int, int]] = []
+    for grade in item.get("prizegrades") or []:
+        try:
+            level = int(grade.get("type"))
+        except (TypeError, ValueError):
+            continue
+        money = _parse_money(grade.get("typemoney"))
+        if level >= 1 and money is not None:
+            out.append((level, money))
+    return tuple(sorted(out))
+
+
+def _prizes_from_dlt(item: dict) -> tuple[tuple[int, int], ...]:
+    out: list[tuple[int, int]] = []
+    for grade in item.get("prizeLevelList") or []:
+        name = str(grade.get("prizeLevel") or "")
+        if "追加" in name:
+            continue
+        # 去掉可能的空格
+        name = name.strip()
+        level = _LEVEL_NAME.get(name)
+        if level is None:
+            continue
+        money = _parse_money(grade.get("stakeAmountFormat") or grade.get("stakeAmount"))
+        if money is not None:
+            out.append((level, money))
+    return tuple(sorted(out))
 
 
 def fetch_ssq(issue_count: int = 100) -> list[Draw]:
@@ -56,6 +110,7 @@ def fetch_ssq(issue_count: int = 100) -> list[Draw]:
                 date=_parse_date(item.get("date", "")),
                 main=_parse_nums(item["red"]),
                 special=_parse_nums(item["blue"]),
+                prizes=_prizes_from_ssq(item),
             )
         )
     return sorted(draws, key=lambda d: d.issue)
@@ -101,6 +156,7 @@ def fetch_dlt(pages: int = 5, page_size: int = 30) -> list[Draw]:
                     date=_parse_date(item.get("lotteryDrawTime", "")),
                     main=nums[:5],
                     special=nums[5:7],
+                    prizes=_prizes_from_dlt(item),
                 )
             )
     return sorted({d.issue: d for d in draws}.values(), key=lambda d: d.issue)

@@ -3,11 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "description": "双色球/大乐透量化桌面端",
+  "author": "Aether",
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
-    "preview": "electron-vite preview"
+    "preview": "electron-vite preview",
+    "dist": "npm run build && electron-builder --mac",
+    "dist:dir": "npm run build && electron-builder --mac dir",
+    "install:local": "npm run dist:dir && rm -rf '/Applications/LQ Terminal.app' '/Applications/AETHER · 量化.app' '/Applications/Aether.app' && cp -R 'release/mac-arm64/Aether.app' /Applications/ && xattr -cr '/Applications/Aether.app' && echo 'Installed: /Applications/Aether.app'"
   },
   "dependencies": {
     "vue": "^3.5.13",
@@ -16,9 +20,47 @@
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.2.1",
     "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
     "electron-vite": "^2.3.0",
     "typescript": "^5.7.2",
     "vite": "^5.4.11",
     "vue-tsc": "^2.1.10"
+  },
+  "build": {
+    "appId": "com.lottery.aether",
+    "productName": "Aether",
+    "copyright": "Copyright © Aether",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "icon": "build/icon.icns",
+    "files": [
+      "out/**/*"
+    ],
+    "mac": {
+      "icon": "build/icon.icns",
+      "category": "public.app-category.finance",
+      "target": [
+        {
+          "target": "dir",
+          "arch": [
+            "arm64"
+          ]
+        },
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "identity": null,
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
+    },
+    "dmg": {
+      "title": "Aether"
+    }
   }
 }

@@ -1,6 +1,7 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, nativeImage } from 'electron'
 import { ChildProcessWithoutNullStreams, spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -14,9 +15,44 @@ let apiProcess: ChildProcessWithoutNullStreams | null = null
 let apiReady = false
 let apiError = ''
 
+function resolveAppIconPath(): string | undefined {
+  const candidates = [
+    join(__dirname, '../../build/icon.icns'),
+    join(__dirname, '../../build/icon.png'),
+    join(app.getAppPath(), 'build/icon.icns'),
+    join(process.resourcesPath || '', 'icon.icns')
+  ]
+  return candidates.find((p) => p && existsSync(p))
+}
+
+function resolveAppIcon() {
+  const p = resolveAppIconPath()
+  if (!p) return undefined
+  const img = nativeImage.createFromPath(p)
+  return img.isEmpty() ? undefined : img
+}
+
 function projectRoot(): string {
-  // out/main -> desktop -> lottery
-  return join(__dirname, '../../..')
+  const fromEnv = process.env.LOTTERY_ROOT
+  if (fromEnv && existsSync(join(fromEnv, 'lottery'))) {
+    return fromEnv
+  }
+
+  if (!app.isPackaged) {
+    // out/main -> desktop -> lottery repo
+    return join(__dirname, '../../..')
+  }
+
+  const candidates = [
+    join(homedir(), 'agent', 'lottery'),
+    '/Users/wangda/agent/lottery'
+  ]
+  for (const c of candidates) {
+    if (existsSync(join(c, 'lottery', 'api'))) {
+      return c
+    }
+  }
+  return candidates[0]
 }
 
 function resolvePython(): string {
@@ -43,7 +79,6 @@ async function waitForHealth(timeoutMs = 20000): Promise<boolean> {
 
 async function startApi(): Promise<void> {
   apiError = ''
-  // 若已有本地服务（例如手动启动），直接复用
   if (await waitForHealth(1500)) {
     apiReady = true
     mainWindow?.webContents.send('api-status', { ready: true, baseUrl: API_BASE, error: '' })
@@ -76,7 +111,9 @@ async function startApi(): Promise<void> {
   const ok = await waitForHealth()
   apiReady = ok
   if (!ok) {
-    apiError = apiError || `无法连接 ${API_BASE}/health，请检查 .venv 或设置 LOTTERY_PYTHON`
+    apiError =
+      apiError ||
+      `无法连接 ${API_BASE}/health。可先手动运行: python -m lottery.api，或设置 LOTTERY_ROOT / LOTTERY_PYTHON`
   }
   mainWindow?.webContents.send('api-status', { ready: apiReady, baseUrl: API_BASE, error: apiError })
 }
@@ -89,12 +126,14 @@ function stopApi(): void {
 }
 
 function createWindow(): void {
+  const icon = resolveAppIcon()
   mainWindow = new BrowserWindow({
     width: 1180,
     height: 780,
     minWidth: 960,
     minHeight: 640,
-    title: 'LQ Terminal',
+    title: 'Aether',
+    ...(icon ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -111,6 +150,15 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  app.setName('Aether')
+  const iconPath = resolveAppIconPath()
+  app.setAboutPanelOptions({
+    applicationName: 'Aether',
+    version: app.getVersion(),
+    copyright: 'Copyright © Aether',
+    ...(iconPath ? { iconPath } : {})
+  })
+
   ipcMain.handle('get-api-status', () => ({
     ready: apiReady,
     baseUrl: API_BASE,

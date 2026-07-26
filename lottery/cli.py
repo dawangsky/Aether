@@ -9,6 +9,7 @@ from rich.console import Console
 
 from lottery.analysis.report import print_analysis, print_recent, print_tickets
 from lottery.backtest.evaluator import print_backtest, run_backtest
+from lottery.check.prize import check_prize
 from lottery.config import GAMES, get_game
 from lottery.data.fetcher import update_game, update_games
 from lottery.data.loader import load_draws
@@ -89,6 +90,52 @@ def cmd_backtest(args: argparse.Namespace) -> int:
     return 0
 
 
+def _parse_nums(text: str) -> list[int]:
+    parts = [p for p in __import__("re").split(r"[\s,，、|+/]+", text.strip()) if p]
+    return [int(p) for p in parts]
+
+
+def cmd_check(args: argparse.Namespace) -> int:
+    draws = _ensure_data(args.game, auto_update=False)
+    if not draws:
+        console.print("[red]本地无数据，请先 update[/red]")
+        return 1
+    try:
+        main = _parse_nums(args.main)
+        special = _parse_nums(args.special)
+        result = check_prize(args.game, args.issue, main, special, draws)
+    except Exception as exc:  # noqa: BLE001
+        console.print(f"[red]{exc}[/red]")
+        return 1
+    color = "green" if result.winning_bets else "yellow"
+    mode_label = "单式" if result.mode == "single" else "复式"
+    console.print(f"期号 {result.issue} ({result.draw_date}) · {mode_label}")
+    console.print(f"开奖: {result.draw_formatted}")
+    console.print(f"投注: {result.ticket_formatted}")
+    console.print(
+        f"选号命中池: 主区 {result.main_hit}/{result.main_selected} · "
+        f"特区 {result.special_hit}/{result.special_selected}"
+    )
+    prize_txt = (
+        f"{result.total_prize:,} 元"
+        if result.total_prize is not None
+        else "—"
+    )
+    console.print(
+        f"拆解注数: {result.total_bets} 注 · 中奖注数: {result.winning_bets} 注 → "
+        f"[{color}]最高 {result.prize_name}[/{color}]（{result.rule}） · 奖金合计 {prize_txt}"
+    )
+    if result.levels:
+        console.print("分奖等明细:")
+        for lv in result.levels:
+            unit = f"{lv.unit_prize:,} 元/注" if lv.unit_prize is not None else "奖金待同步"
+            amt = f"{lv.amount:,} 元" if lv.amount is not None else "—"
+            console.print(
+                f"  {lv.prize_name} {lv.rule}: {lv.count} 注 · {unit} · 小计 {amt}"
+            )
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="lottery",
@@ -125,6 +172,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_bt.add_argument("--periods", type=int, default=50)
     p_bt.add_argument("--seed", type=int, default=42)
     p_bt.set_defaults(func=cmd_backtest)
+
+    p_ck = sub.add_parser("check", help="按期号核对中奖等级")
+    p_ck.add_argument("--game", choices=["ssq", "dlt"], required=True)
+    p_ck.add_argument("--issue", required=True, help="期号，如 2026085")
+    p_ck.add_argument("--main", required=True, help="主区号码，空格或逗号分隔")
+    p_ck.add_argument("--special", required=True, help="特区号码，空格或逗号分隔")
+    p_ck.set_defaults(func=cmd_check)
 
     return parser
 

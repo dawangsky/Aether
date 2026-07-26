@@ -79,3 +79,41 @@ class BacktestResponse(BaseModel):
     game: GameKey
     result: dict[str, Any]
     note: str = "接近随机不代表系统故障，说明缺少显著预测边缘。"
+
+
+class CheckRequest(BaseModel):
+    game: GameKey
+    issue: str = Field(..., min_length=1, description="开奖期号，如 2026085 或 26085")
+    main: list[int] = Field(..., min_length=1, description="主区号码；复式可多于单式个数")
+    special: list[int] = Field(..., min_length=1, description="特区号码；复式可多于单式个数")
+
+
+class PrizeLevelItem(BaseModel):
+    prize_level: int
+    prize_name: str
+    rule: str
+    count: int
+    unit_prize: int | None = None
+    amount: int | None = None
+
+
+class CheckResponse(BaseModel):
+    game: GameKey
+    issue: str
+    draw_date: str
+    draw_formatted: str
+    ticket_formatted: str
+    mode: str
+    main_selected: int
+    special_selected: int
+    main_hit: int
+    special_hit: int
+    total_bets: int
+    winning_bets: int
+    levels: list[PrizeLevelItem]
+    prize_level: int | None
+    prize_name: str
+    rule: str
+    won: bool
+    total_prize: int | None = None
+    prize_source: str = "none"

@@ -30,7 +30,7 @@ async function refreshData() {
   updateMsg.value = ''
   try {
     const res = await api.update(game.value)
-    updateMsg.value = res.results.map((r) => `${r.game}: 共${r.total}期 / +${r.added}`).join('  ·  ')
+    updateMsg.value = res.results.map((r) => `${r.game}: 共 ${r.total} 期 / 新增 ${r.added}`).join('  ·  ')
     await load()
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e)
@@ -45,35 +45,35 @@ onMounted(load)
   <section class="page">
     <div class="page-head">
       <div>
-        <h1>行情开奖</h1>
-        <p class="lead">本地历史序列 · 支持增量同步官方源</p>
+        <h1>开奖行情</h1>
+        <p class="lead">本地历史序列 · 可增量同步官方数据源</p>
       </div>
-      <div class="panel-id">PANEL / DRAWS</div>
+      <div class="panel-id">DRAWS</div>
     </div>
 
     <div class="toolbar">
       <label class="field">
-        Instrument
+        彩种
         <select v-model="game" @change="load">
           <option value="ssq">SSQ 双色球</option>
           <option value="dlt">DLT 大乐透</option>
         </select>
       </label>
       <label class="field">
-        Depth
+        最近期数
         <input v-model.number="limit" type="number" min="5" max="100" />
       </label>
-      <button class="btn secondary" :disabled="loading" @click="load">Refresh</button>
-      <button class="btn" :disabled="loading" @click="refreshData">Sync Feed</button>
+      <button class="btn secondary" :disabled="loading" @click="load">刷新</button>
+      <button class="btn" :disabled="loading" @click="refreshData">同步数据</button>
     </div>
 
     <div class="metric-row">
       <div class="metric">
-        <div class="label">Local Store</div>
+        <div class="label">本地存量</div>
         <div class="value flat">{{ total }}</div>
       </div>
       <div class="metric">
-        <div class="label">Visible</div>
+        <div class="label">当前展示</div>
         <div class="value">{{ items.length }}</div>
       </div>
       <div class="metric">
@@ -81,7 +81,7 @@ onMounted(load)
         <div class="value">{{ game.toUpperCase() }}</div>
       </div>
       <div class="metric">
-        <div class="label">Status</div>
+        <div class="label">状态</div>
         <div class="value" :class="loading ? 'flat' : 'bid'">{{ loading ? 'LOAD' : 'IDLE' }}</div>
       </div>
     </div>
@@ -91,16 +91,16 @@ onMounted(load)
 
     <div class="panel">
       <div class="panel-hd">
-        <span>Time & Sales · 开奖明细</span>
+        <span>开奖明细</span>
         <span>{{ game.toUpperCase() }}</span>
       </div>
       <div class="panel-bd" style="padding: 0">
         <table class="data">
           <thead>
             <tr>
-              <th>Issue</th>
-              <th>Date</th>
-              <th>Print</th>
+              <th>期号</th>
+              <th>日期</th>
+              <th>号码</th>
             </tr>
           </thead>
           <tbody>

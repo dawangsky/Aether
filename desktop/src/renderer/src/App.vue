@@ -2,14 +2,18 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getApiBaseUrl, setApiBaseUrl } from './api/client'
+import { applyTheme, loadTheme } from './themes'
+import logoUrl from './assets/logo.png'
 
 type ApiStatus = { ready: boolean; baseUrl: string; error: string }
 
 const nav = [
-  { path: '/draws', code: '01', label: '行情开奖' },
+  { path: '/draws', code: '01', label: '开奖行情' },
   { path: '/analyze', code: '02', label: '因子分析' },
   { path: '/predict', code: '03', label: '信号生成' },
-  { path: '/backtest', code: '04', label: '回测台' }
+  { path: '/backtest', code: '04', label: '回测台' },
+  { path: '/check', code: '05', label: '中奖核对' },
+  { path: '/themes', code: '06', label: '界面主题' }
 ]
 
 const route = useRoute()
@@ -31,6 +35,7 @@ function tick() {
 }
 
 onMounted(async () => {
+  applyTheme(loadTheme())
   tick()
   timer = window.setInterval(tick, 1000)
   const bridge = window.lotteryDesktop
@@ -57,15 +62,16 @@ onUnmounted(() => {
   <div class="app-shell">
     <header class="topbar">
       <div class="brand-lockup">
-        <div class="brand-mark">LQ Terminal</div>
-        <div class="brand-title">双色球 / 大乐透 · 本地量化终端</div>
+        <img class="brand-logo" :src="logoUrl" alt="" width="22" height="22" />
+        <div class="brand-mark">Aether</div>
+        <div class="brand-title">双色球 / 大乐透 · 彩票量化</div>
       </div>
       <div class="ticker">
         <span><strong>SSQ</strong> 红6+蓝1</span>
         <span><strong>DLT</strong> 前5+后2</span>
-        <span><strong>MODE</strong> RESEARCH</span>
-        <span class="down"><strong>EDGE</strong> UNPROVEN</span>
-        <span class="up"><strong>DATA</strong> LOCAL CSV</span>
+        <span><strong>MODE</strong> 研究模式</span>
+        <span class="down"><strong>EDGE</strong> 未验证</span>
+        <span class="up"><strong>DATA</strong> 本地 CSV</span>
       </div>
       <div class="conn" :class="connClass">
         <span class="conn-dot" />
@@ -76,7 +82,7 @@ onUnmounted(() => {
 
     <div class="workspace">
       <aside class="rail">
-        <div class="rail-label">Workspace</div>
+        <div class="rail-label">工作区</div>
         <button
           v-for="item in nav"
           :key="item.path"
@@ -87,11 +93,6 @@ onUnmounted(() => {
           <span class="nav-code">{{ item.code }}</span>
           <span class="nav-name">{{ item.label }}</span>
         </button>
-        <div class="rail-foot">
-          <div>ENDPOINT</div>
-          <div>{{ status.baseUrl }}</div>
-          <div v-if="status.error" class="err">{{ status.error }}</div>
-        </div>
       </aside>
 
       <main class="content">
@@ -100,7 +101,7 @@ onUnmounted(() => {
     </div>
 
     <footer class="statusbar">
-      <span>LQ · RESEARCH ONLY · NO INVESTMENT ADVICE</span>
+      <span>Aether · RESEARCH ONLY</span>
       <span>仅供研究娱乐 · 开奖随机 · <em>不构成投注建议</em></span>
     </footer>
   </div>

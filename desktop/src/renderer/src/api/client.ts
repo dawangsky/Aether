@@ -52,5 +52,7 @@ export const api = {
     n: number
     periods: number
     seed?: number
-  }) => request<any>('/backtest', { method: 'POST', body: JSON.stringify(body) })
+  }) => request<any>('/backtest', { method: 'POST', body: JSON.stringify(body) }),
+  check: (body: { game: GameKey; issue: string; main: number[]; special: number[] }) =>
+    request<any>('/check', { method: 'POST', body: JSON.stringify(body) })
 }

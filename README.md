@@ -56,7 +56,18 @@ ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/" npm install --registry
 npm run dev
 ```
 
-Electron 启动时会检测 `127.0.0.1:8765`；若未运行则自动用仓库 `.venv` 拉起 API。也可设置 `LOTTERY_PYTHON=/path/to/python`。
+打包并安装到「应用程序」：
+
+```bash
+cd desktop
+npm run install:local
+# 产物：release/mac-arm64/LQ Terminal.app
+# 同时安装到：/Applications/LQ Terminal.app
+# 也可打开：release/*.dmg
+```
+
+Electron 启动时会检测 `127.0.0.1:8765`；若未运行则尝试用仓库 `.venv` 拉起 API。  
+打包后可通过环境变量指定仓库：`LOTTERY_ROOT`、`LOTTERY_PYTHON`。
 
 ## OpenSpec
 

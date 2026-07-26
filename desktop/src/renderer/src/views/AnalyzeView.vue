@@ -28,14 +28,14 @@ onMounted(load)
     <div class="page-head">
       <div>
         <h1>因子分析</h1>
-        <p class="lead">冷热 · 遗漏分层 · 上期形态复盘</p>
+        <p class="lead">冷热分布 · 遗漏分层 · 上期形态复盘</p>
       </div>
-      <div class="panel-id">PANEL / ANALYZE</div>
+      <div class="panel-id">ANALYZE</div>
     </div>
 
     <div class="toolbar">
       <label class="field">
-        Instrument
+        彩种
         <select v-model="game">
           <option value="ssq">SSQ 双色球</option>
           <option value="dlt">DLT 大乐透</option>
@@ -45,7 +45,7 @@ onMounted(load)
         Window
         <input v-model.number="windowSize" type="number" min="10" max="200" />
       </label>
-      <button class="btn" :disabled="loading" @click="load">Run Factor</button>
+      <button class="btn" :disabled="loading" @click="load">开始分析</button>
     </div>
 
     <p v-if="error" class="error">{{ error }}</p>
@@ -53,37 +53,37 @@ onMounted(load)
     <template v-if="data">
       <div class="metric-row">
         <div class="metric">
-          <div class="label">Last Sum</div>
+          <div class="label">上期和值</div>
           <div class="value flat">{{ data.last_pattern.sum }}</div>
         </div>
         <div class="metric">
-          <div class="label">Span</div>
+          <div class="label">跨度 Span</div>
           <div class="value">{{ data.last_pattern.span }}</div>
         </div>
         <div class="metric">
-          <div class="label">Odd/Even</div>
+          <div class="label">奇偶</div>
           <div class="value">{{ data.last_pattern.odd_even }}</div>
         </div>
         <div class="metric">
-          <div class="label">Zones</div>
+          <div class="label">三区</div>
           <div class="value">{{ data.last_pattern.zones }}</div>
         </div>
       </div>
 
       <div class="panel">
         <div class="panel-hd">
-          <span>Last Print</span>
+          <span>上期开奖</span>
           <span>{{ data.last_draw.issue }}</span>
         </div>
         <div class="panel-bd">
           <div class="kv">
-            <div class="k">DATE</div>
+            <div class="k">日期</div>
             <div class="v">{{ data.last_draw.date }}</div>
-            <div class="k">NUMBERS</div>
+            <div class="k">号码</div>
             <div class="v">{{ data.last_draw.formatted }}</div>
-            <div class="k">HUB</div>
+            <div class="k">中枢</div>
             <div class="v">
-              mean {{ data.history_summary.sum_mean }} / median {{ data.history_summary.sum_median }}
+              均值 {{ data.history_summary.sum_mean }} / 中位 {{ data.history_summary.sum_median }}
             </div>
           </div>
         </div>
@@ -91,13 +91,13 @@ onMounted(load)
 
       <div class="grid-2">
         <div class="panel">
-          <div class="panel-hd"><span>Hot Book</span><span>FREQ</span></div>
+          <div class="panel-hd"><span>热号 Hot</span><span>FREQ</span></div>
           <div class="panel-bd" style="padding: 0">
             <table class="data">
               <thead>
                 <tr>
-                  <th>No.</th>
-                  <th class="num">Hits</th>
+                  <th>号码</th>
+                  <th class="num">出现次数</th>
                 </tr>
               </thead>
               <tbody>
@@ -110,14 +110,14 @@ onMounted(load)
           </div>
         </div>
         <div class="panel">
-          <div class="panel-hd"><span>Omission Desk</span><span>LAG</span></div>
+          <div class="panel-hd"><span>遗漏 Omission</span><span>LAG</span></div>
           <div class="panel-bd" style="padding: 0">
             <table class="data">
               <thead>
                 <tr>
-                  <th>No.</th>
-                  <th class="num">Now</th>
-                  <th class="num">Avg</th>
+                  <th>号码</th>
+                  <th class="num">当前</th>
+                  <th class="num">均值</th>
                 </tr>
               </thead>
               <tbody>
@@ -133,14 +133,14 @@ onMounted(load)
       </div>
 
       <div class="panel">
-        <div class="panel-hd"><span>Omission Bands</span><span>LAYER</span></div>
+        <div class="panel-hd"><span>遗漏分层</span><span>BAND</span></div>
         <div class="panel-bd" style="padding: 0">
           <table class="data">
             <thead>
               <tr>
-                <th>Band</th>
-                <th>Members</th>
-                <th class="num">N</th>
+                <th>分层</th>
+                <th>号码</th>
+                <th class="num">个数</th>
               </tr>
             </thead>
             <tbody>

@@ -3,10 +3,12 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 dist/
-build/
+/build/
 .DS_Store
 .pytest_cache/
 .idea/
 desktop/node_modules/
 desktop/out/
 desktop/dist/
+desktop/release/
+desktop/build/icon.iconset/

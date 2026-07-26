@@ -9,17 +9,21 @@ from lottery.analysis.service import build_analyze_payload
 from lottery.api.schemas import (
     BacktestRequest,
     BacktestResponse,
+    CheckRequest,
+    CheckResponse,
     DrawItem,
     DrawsResponse,
     HealthResponse,
     PredictRequest,
     PredictResponse,
+    PrizeLevelItem,
     TicketItem,
     UpdateRequest,
     UpdateResponse,
     UpdateResultItem,
 )
 from lottery.backtest.evaluator import run_backtest
+from lottery.check.prize import check_prize
 from lottery.config import GAMES, get_game
 from lottery.data.fetcher import update_game, update_games
 from lottery.data.loader import load_draws
@@ -139,3 +143,47 @@ def backtest(body: BacktestRequest) -> BacktestResponse:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return BacktestResponse(game=body.game, result=result)
+
+
+@router.post("/check", response_model=CheckResponse)
+def check(body: CheckRequest) -> CheckResponse:
+    draws = load_draws(body.game)
+    if not draws:
+        raise HTTPException(status_code=400, detail="本地无开奖数据，请先 POST /update")
+    try:
+        result = check_prize(body.game, body.issue, body.main, body.special, draws)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return CheckResponse(
+        game=body.game,  # type: ignore[arg-type]
+        issue=result.issue,
+        draw_date=result.draw_date,
+        draw_formatted=result.draw_formatted,
+        ticket_formatted=result.ticket_formatted,
+        mode=result.mode,
+        main_selected=result.main_selected,
+        special_selected=result.special_selected,
+        main_hit=result.main_hit,
+        special_hit=result.special_hit,
+        total_bets=result.total_bets,
+        winning_bets=result.winning_bets,
+        levels=[
+            PrizeLevelItem(
+                prize_level=x.prize_level,
+                prize_name=x.prize_name,
+                rule=x.rule,
+                count=x.count,
+                unit_prize=x.unit_prize,
+                amount=x.amount,
+            )
+            for x in result.levels
+        ],
+        prize_level=result.prize_level,
+        prize_name=result.prize_name,
+        rule=result.rule,
+        won=result.won,
+        total_prize=result.total_prize,
+        prize_source=result.prize_source,
+    )

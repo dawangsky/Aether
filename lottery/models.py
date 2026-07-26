@@ -12,12 +12,21 @@ class Draw:
     date: str
     main: tuple[int, ...]
     special: tuple[int, ...]
+    # 奖等 -> 单注奖金（元），来自官网当期公告；无数据时为空
+    prizes: tuple[tuple[int, int], ...] = ()
 
     def main_sorted(self) -> tuple[int, ...]:
         return tuple(sorted(self.main))
 
     def special_sorted(self) -> tuple[int, ...]:
         return tuple(sorted(self.special))
+
+    def prize_map(self) -> dict[int, int]:
+        return dict(self.prizes)
+
+    def unit_prize(self, level: int) -> int | None:
+        money = self.prize_map().get(level)
+        return money if money is not None and money >= 0 else None
 
     def format_numbers(self) -> str:
         main = " ".join(f"{n:02d}" for n in self.main_sorted())
