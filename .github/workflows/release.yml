@@ -36,7 +36,9 @@ jobs:
         id: package
         run: |
           set -o pipefail
-          npx electron-builder --mac dmg --arm64 --x64 --publish never 2>&1 | tee package.log
+          # Build arches sequentially — parallel DMGs collide on the same /Volumes name.
+          npx electron-builder --mac dmg --arm64 --publish never 2>&1 | tee package.log
+          npx electron-builder --mac dmg --x64 --publish never 2>&1 | tee -a package.log
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Comment failure log
@@ -115,24 +117,32 @@ jobs:
   release:
     name: Publish GitHub Release
     needs: [build-mac, build-win]
-    if: always() && needs.build-mac.result == 'success' && needs.build-win.result == 'success'
+    if: always() && (needs.build-mac.result == 'success' || needs.build-win.result == 'success')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
+        if: needs.build-mac.result == 'success'
         with:
           name: aether-mac
           path: dist
       - uses: actions/download-artifact@v4
+        if: needs.build-win.result == 'success'
         with:
           name: aether-win
           path: dist
       - run: ls -la dist
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || 'v0.1.3' }}
-          name: Aether ${{ github.ref_type == 'tag' && github.ref_name || 'v0.1.3' }}
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || 'v0.1.6' }}
+          name: Aether ${{ github.ref_type == 'tag' && github.ref_name || 'v0.1.6' }}
           generate_release_notes: true
           files: dist/*
+          body: |
+            ## Downloads
+            - macOS Apple Silicon: `Aether-*-mac-arm64.dmg`
+            - macOS Intel: `Aether-*-mac-x64.dmg`
+            - Windows setup: `Aether-*-win-x64-setup.exe`
+            - Windows portable: `Aether-*-win-x64-portable.exe`
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
