@@ -1,8 +1,8 @@
 import { app, BrowserWindow, ipcMain, nativeImage } from 'electron'
-import { ChildProcessWithoutNullStreams, spawn, spawnSync } from 'node:child_process'
-import { copyFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { ChildProcessWithoutNullStreams, spawn } from 'node:child_process'
+import { copyFileSync, existsSync, mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url))
@@ -16,12 +16,11 @@ let apiReady = false
 let apiError = ''
 
 function emitStatus(extra?: Partial<{ ready: boolean; error: string }>) {
-  const payload = {
+  mainWindow?.webContents.send('api-status', {
     ready: extra?.ready ?? apiReady,
     baseUrl: API_BASE,
     error: extra?.error ?? apiError
-  }
-  mainWindow?.webContents.send('api-status', payload)
+  })
 }
 
 function resolveAppIconPath(): string | undefined {
@@ -43,149 +42,52 @@ function resolveAppIcon() {
   return img.isEmpty() ? undefined : img
 }
 
-function projectRoot(): string {
-  const fromEnv = process.env.LOTTERY_ROOT
-  if (fromEnv && existsSync(join(fromEnv, 'lottery'))) {
-    return fromEnv
-  }
-
-  if (app.isPackaged) {
-    const bundled = join(process.resourcesPath, 'backend')
-    if (existsSync(join(bundled, 'lottery'))) {
-      return bundled
-    }
-  } else {
-    return join(__dirname, '../../..')
-  }
-
-  const candidates = [join(homedir(), 'agent', 'lottery'), '/Users/wangda/agent/lottery']
-  for (const c of candidates) {
-    if (existsSync(join(c, 'lottery', 'api'))) return c
-  }
-  return candidates[0]
+function dataDir(): string {
+  return join(app.getPath('userData'), 'runtime', 'data')
 }
 
-function runtimeDirs() {
-  const root = join(app.getPath('userData'), 'runtime')
-  return {
-    root,
-    venv: join(root, 'venv'),
-    data: join(root, 'data'),
-    marker: join(root, 'deps.ok')
-  }
+function seedDataDir(): string | null {
+  const candidates = [
+    join(process.resourcesPath || '', 'backend', 'data'),
+    join(__dirname, '../../../data'),
+    join(homedir(), 'agent', 'lottery', 'data')
+  ]
+  return candidates.find((p) => p && existsSync(p)) || null
 }
 
-function listBasePythons(): string[] {
-  const envPython = process.env.LOTTERY_PYTHON
-  const out: string[] = []
-  if (envPython) out.push(envPython)
-
-  if (process.platform === 'win32') {
-    out.push('py', 'python', 'python3')
-  } else {
-    out.push(
-      '/opt/homebrew/bin/python3',
-      '/usr/local/bin/python3',
-      '/Library/Frameworks/Python.framework/Versions/3.12/bin/python3',
-      '/Library/Frameworks/Python.framework/Versions/3.11/bin/python3',
-      '/Library/Frameworks/Python.framework/Versions/3.10/bin/python3',
-      '/usr/bin/python3',
-      'python3',
-      'python'
-    )
-  }
-
-  const root = projectRoot()
-  if (process.platform === 'win32') {
-    out.unshift(join(root, '.venv', 'Scripts', 'python.exe'))
-  } else {
-    out.unshift(join(root, '.venv', 'bin', 'python3'), join(root, '.venv', 'bin', 'python'))
-  }
-  return out
-}
-
-function pythonVersionOk(bin: string): boolean {
-  try {
-    const r = spawnSync(bin, ['-c', 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)'], {
-      encoding: 'utf8',
-      timeout: 8000
-    })
-    return r.status === 0
-  } catch {
-    return false
-  }
-}
-
-function resolveBasePython(): string {
-  for (const bin of listBasePythons()) {
-    if (!bin) continue
-    if (bin.includes('/') || bin.includes('\\')) {
-      if (!existsSync(bin)) continue
-    }
-    if (pythonVersionOk(bin)) return bin
-  }
-  throw new Error('未找到 Python 3.10+。请先安装 Python，然后重新打开 Aether。')
-}
-
-function venvPython(venvDir: string): string {
-  return process.platform === 'win32'
-    ? join(venvDir, 'Scripts', 'python.exe')
-    : join(venvDir, 'bin', 'python')
-}
-
-function run(bin: string, args: string[], opts?: { cwd?: string; env?: NodeJS.ProcessEnv }): void {
-  const r = spawnSync(bin, args, {
-    cwd: opts?.cwd,
-    env: opts?.env ?? process.env,
-    encoding: 'utf8',
-    timeout: 1000 * 60 * 8
-  })
-  if (r.status !== 0) {
-    const detail = (r.stderr || r.stdout || '').trim().slice(-800)
-    throw new Error(`命令失败: ${bin} ${args.join(' ')}\n${detail}`)
-  }
-}
-
-function seedData(dataDir: string) {
-  mkdirSync(dataDir, { recursive: true })
-  const bundledData = join(projectRoot(), 'data')
+function ensureData() {
+  const dest = dataDir()
+  mkdirSync(dest, { recursive: true })
+  const srcRoot = seedDataDir()
+  if (!srcRoot) return
   for (const name of ['ssq.csv', 'dlt.csv']) {
-    const target = join(dataDir, name)
+    const target = join(dest, name)
     if (existsSync(target)) continue
-    const src = join(bundledData, name)
+    const src = join(srcRoot, name)
     if (existsSync(src)) copyFileSync(src, target)
   }
 }
 
-async function ensureRuntime(): Promise<string> {
-  const dirs = runtimeDirs()
-  mkdirSync(dirs.root, { recursive: true })
-  seedData(dirs.data)
-
-  const py = venvPython(dirs.venv)
-  const req = join(projectRoot(), 'requirements.txt')
-  const needInstall = !existsSync(py) || !existsSync(dirs.marker)
-
-  if (!existsSync(py)) {
-    emitStatus({ ready: false, error: '正在创建 Python 运行环境…' })
-    const base = resolveBasePython()
-    run(base, ['-m', 'venv', dirs.venv])
-  }
-
-  if (needInstall) {
-    emitStatus({ ready: false, error: '正在安装 API 依赖（首次启动较慢）…' })
-    const pipPy = venvPython(dirs.venv)
-    run(pipPy, ['-m', 'pip', 'install', '--upgrade', 'pip'], { cwd: dirs.root })
-    run(pipPy, ['-m', 'pip', 'install', '-r', req], { cwd: dirs.root })
-    // sanity import
-    run(pipPy, ['-c', 'import fastapi, uvicorn, pydantic, requests, pandas'])
-    writeFileSync(dirs.marker, new Date().toISOString())
-  }
-
-  return venvPython(dirs.venv)
+function resolveBundledApi(): string | null {
+  const name = process.platform === 'win32' ? 'aether-api.exe' : 'aether-api'
+  const candidates = [
+    join(process.resourcesPath || '', 'bin', name),
+    join(__dirname, '../../resources/bin', name)
+  ]
+  return candidates.find((p) => p && existsSync(p)) || null
 }
 
-async function waitForHealth(timeoutMs = 30000): Promise<boolean> {
+function resolveDevPython(): string {
+  const root = join(__dirname, '../../..')
+  const venv =
+    process.platform === 'win32'
+      ? join(root, '.venv', 'Scripts', 'python.exe')
+      : join(root, '.venv', 'bin', 'python')
+  if (existsSync(venv)) return venv
+  return process.platform === 'win32' ? 'python' : 'python3'
+}
+
+async function waitForHealth(timeoutMs = 45000): Promise<boolean> {
   const start = Date.now()
   while (Date.now() - start < timeoutMs) {
     try {
@@ -202,6 +104,7 @@ async function waitForHealth(timeoutMs = 30000): Promise<boolean> {
 async function startApi(): Promise<void> {
   apiError = ''
   emitStatus({ ready: false, error: '正在启动本地 API…' })
+  ensureData()
 
   if (await waitForHealth(1200)) {
     apiReady = true
@@ -209,71 +112,67 @@ async function startApi(): Promise<void> {
     emitStatus()
     return
   }
-
   if (apiProcess) return
 
+  const bundled = resolveBundledApi()
+  const env = {
+    ...process.env,
+    PYTHONUNBUFFERED: '1',
+    LOTTERY_DATA_DIR: dataDir()
+  }
+
   try {
-    const python = app.isPackaged ? await ensureRuntime() : resolveBasePython()
-    const cwd = projectRoot()
-    const dataDir = app.isPackaged ? runtimeDirs().data : join(cwd, 'data')
-    if (!app.isPackaged) seedData(dataDir)
-
-    apiReady = false
-    apiProcess = spawn(python, ['-m', 'lottery.api', '--host', '127.0.0.1', '--port', String(DEFAULT_PORT)], {
-      cwd,
-      env: {
-        ...process.env,
-        PATH: [
-          dirname(python),
-          '/opt/homebrew/bin',
-          '/usr/local/bin',
-          process.env.PATH || '',
-          '/usr/bin',
-          '/bin'
-        ].join(process.platform === 'win32' ? ';' : ':'),
-        PYTHONUNBUFFERED: '1',
-        PYTHONPATH: [cwd, process.env.PYTHONPATH || ''].filter(Boolean).join(process.platform === 'win32' ? ';' : ':'),
-        LOTTERY_DATA_DIR: dataDir
-      }
-    })
-
-    apiProcess.on('error', (err) => {
-      apiError = `启动 API 失败: ${err.message}`
-      apiReady = false
-      emitStatus()
-    })
-
-    apiProcess.stderr.on('data', (buf) => {
-      const text = buf.toString()
-      if (/error|exception|traceback|address already in use/i.test(text)) {
-        apiError = text.slice(0, 600)
-      }
-    })
-
-    apiProcess.on('exit', (code) => {
-      if (!apiReady) {
-        apiError = apiError || `API 进程退出，code=${code}`
-        emitStatus()
-      }
-      apiProcess = null
-      apiReady = false
-    })
-
-    const ok = await waitForHealth(45000)
-    apiReady = ok
-    if (!ok) {
-      apiError =
-        apiError ||
-        `无法连接 ${API_BASE}/health。请安装 Python 3.10+ 后重开应用，或查看是否被防火墙拦截。`
+    if (bundled) {
+      apiProcess = spawn(bundled, ['--host', '127.0.0.1', '--port', String(DEFAULT_PORT)], {
+        env,
+        cwd: dataDir()
+      })
+    } else if (!app.isPackaged) {
+      const root = join(__dirname, '../../..')
+      const python = resolveDevPython()
+      apiProcess = spawn(python, ['-m', 'lottery.api', '--host', '127.0.0.1', '--port', String(DEFAULT_PORT)], {
+        cwd: root,
+        env: {
+          ...env,
+          PYTHONPATH: [root, process.env.PYTHONPATH || ''].filter(Boolean).join(process.platform === 'win32' ? ';' : ':')
+        }
+      })
     } else {
-      apiError = ''
+      throw new Error('安装包缺少内嵌 API（bin/aether-api）。请重新下载完整发行版。')
     }
-    emitStatus()
   } catch (e) {
     apiReady = false
     apiError = e instanceof Error ? e.message : String(e)
     emitStatus()
+    return
   }
+
+  apiProcess.on('error', (err) => {
+    apiError = `启动 API 失败: ${err.message}`
+    apiReady = false
+    emitStatus()
+  })
+  apiProcess.stderr?.on('data', (buf) => {
+    const text = buf.toString()
+    if (/error|exception|traceback|address already in use/i.test(text)) {
+      apiError = text.slice(0, 600)
+    }
+  })
+  apiProcess.on('exit', (code) => {
+    if (!apiReady) {
+      apiError = apiError || `API 进程退出，code=${code}`
+      emitStatus()
+    }
+    apiProcess = null
+    apiReady = false
+  })
+
+  const ok = await waitForHealth()
+  apiReady = ok
+  apiError = ok
+    ? ''
+    : apiError || `无法连接 ${API_BASE}/health。请重启应用；若仍失败请反馈日志。`
+  emitStatus()
 }
 
 function stopApi(): void {

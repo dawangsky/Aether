@@ -60,7 +60,7 @@ npm run dev
 
 ```bash
 cd desktop
-npm run install:local
+npm run install:local   # 会先 PyInstaller 构建内嵌 API，再打 mac 包
 # 产物：release/mac-arm64/Aether.app
 # 安装到：/Applications/Aether.app
 ```
@@ -68,12 +68,12 @@ npm run install:local
 跨平台安装包由 GitHub Actions 在打 `v*` tag 时自动构建并上传到 [Releases](https://github.com/dawangsky/Aether/releases)：
 
 - macOS：`Aether-*-mac-arm64.dmg` / `Aether-*-mac-x64.dmg`
-- Windows：`Aether-*-win-x64.exe`（NSIS 安装版 + portable）
+- Windows：`Aether-*-win-x64-setup.exe` / `Aether-*-win-x64-portable.exe`
 
-也可在 Actions 页手动触发 `Release` workflow。
+**发行版已内嵌 API 可执行文件，对方无需预先安装 Python。**  
+macOS 若提示已损坏：`xattr -cr /Applications/Aether.app`
 
-Electron 启动时会检测 `127.0.0.1:8765`；若未运行则尝试拉起内嵌/本地 Python API。  
-可通过环境变量指定：`LOTTERY_ROOT`、`LOTTERY_PYTHON`。打包版会优先使用应用资源目录中的 `backend/`。
+开发模式仍可用仓库 `.venv` 拉起 `python -m lottery.api`。
 
 ## OpenSpec
 

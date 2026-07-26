@@ -1,6 +1,6 @@
 {
   "name": "lottery-desktop",
-  "version": "0.1.7",
+  "version": "0.2.0",
   "private": true,
   "description": "双色球/大乐透量化桌面端",
   "author": "Aether <aether@users.noreply.github.com>",
@@ -13,11 +13,12 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
+    "sidecar": "bash ../scripts/build_api_sidecar.sh",
     "dist": "npm run build && electron-builder --mac",
     "dist:mac": "npm run build && electron-builder --mac",
     "dist:win": "npm run build && electron-builder --win",
     "dist:dir": "npm run build && electron-builder --mac dir",
-    "install:local": "npm run dist:dir && rm -rf '/Applications/LQ Terminal.app' '/Applications/AETHER · 量化.app' '/Applications/Aether.app' && cp -R 'release/mac-arm64/Aether.app' /Applications/ && xattr -cr '/Applications/Aether.app' && echo 'Installed: /Applications/Aether.app'"
+    "install:local": "npm run sidecar && npm run dist:dir && rm -rf '/Applications/LQ Terminal.app' '/Applications/AETHER · 量化.app' '/Applications/Aether.app' && cp -R 'release/mac-arm64/Aether.app' /Applications/ && xattr -cr '/Applications/Aether.app' && echo 'Installed: /Applications/Aether.app'"
   },
   "dependencies": {
     "vue": "^3.5.13",
@@ -46,13 +47,10 @@
     ],
     "extraResources": [
       {
-        "from": "../lottery",
-        "to": "backend/lottery",
+        "from": "resources/bin",
+        "to": "bin",
         "filter": [
-          "**/*",
-          "!**/__pycache__/**",
-          "!**/*.pyc",
-          "!**/*.pyo"
+          "**/*"
         ]
       },
       {
@@ -61,14 +59,6 @@
         "filter": [
           "**/*.csv"
         ]
-      },
-      {
-        "from": "../requirements.txt",
-        "to": "backend/requirements.txt"
-      },
-      {
-        "from": "../pyproject.toml",
-        "to": "backend/pyproject.toml"
       }
     ],
     "mac": {

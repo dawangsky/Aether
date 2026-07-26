@@ -12,3 +12,6 @@ desktop/out/
 desktop/dist/
 desktop/release/
 desktop/build/icon.iconset/
+desktop/resources/bin/
+!desktop/resources/bin/.gitkeep
+

@@ -17,28 +17,31 @@ env:
   CSC_IDENTITY_AUTO_DISCOVERY: 'false'
 
 jobs:
-  build-mac:
-    name: Build macOS
+  build-mac-arm64:
+    name: Build macOS arm64
     runs-on: macos-14
     defaults:
       run:
         working-directory: desktop
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: desktop/package-lock.json
+      - name: Build embedded API sidecar
+        working-directory: .
+        run: bash scripts/build_api_sidecar.sh
       - run: npm ci
       - run: npm run build
       - name: Package
-        id: package
         run: |
           set -o pipefail
-          # Build arches sequentially — parallel DMGs collide on the same /Volumes name.
           npx electron-builder --mac dmg --arm64 --publish never 2>&1 | tee package.log
-          npx electron-builder --mac dmg --x64 --publish never 2>&1 | tee -a package.log
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Comment failure log
@@ -47,7 +50,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           {
-            echo "### macOS package failed"
+            echo "### macOS arm64 package failed"
             echo
             echo '```'
             tail -n 80 package.log || true
@@ -61,8 +64,59 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: success()
         with:
-          name: aether-mac
-          path: desktop/release/*.dmg
+          name: aether-mac-arm64
+          path: desktop/release/*-mac-arm64.dmg
+          if-no-files-found: error
+
+  build-mac-x64:
+    name: Build macOS x64
+    runs-on: macos-13
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - name: Build embedded API sidecar
+        working-directory: .
+        run: bash scripts/build_api_sidecar.sh
+      - run: npm ci
+      - run: npm run build
+      - name: Package
+        run: |
+          set -o pipefail
+          npx electron-builder --mac dmg --x64 --publish never 2>&1 | tee package.log
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Comment failure log
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          {
+            echo "### macOS x64 package failed"
+            echo
+            echo '```'
+            tail -n 80 package.log || true
+            echo '```'
+          } > /tmp/body.md
+          curl -sS -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/commits/${{ github.sha }}/comments" \
+            -d "$(python3 -c 'import json;print(json.dumps({"body":open("/tmp/body.md").read()}))')"
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: aether-mac-x64
+          path: desktop/release/*-mac-x64.dmg
           if-no-files-found: error
 
   build-win:
@@ -73,11 +127,18 @@ jobs:
         working-directory: desktop
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: desktop/package-lock.json
+      - name: Build embedded API sidecar
+        working-directory: .
+        shell: pwsh
+        run: ./scripts/build_api_sidecar.ps1
       - run: npm ci
       - run: npm run build
       - name: Package
@@ -116,15 +177,20 @@ jobs:
 
   release:
     name: Publish GitHub Release
-    needs: [build-mac, build-win]
-    if: always() && (needs.build-mac.result == 'success' || needs.build-win.result == 'success')
+    needs: [build-mac-arm64, build-mac-x64, build-win]
+    if: always() && (needs.build-mac-arm64.result == 'success' || needs.build-mac-x64.result == 'success' || needs.build-win.result == 'success')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
-        if: needs.build-mac.result == 'success'
+        if: needs.build-mac-arm64.result == 'success'
         with:
-          name: aether-mac
+          name: aether-mac-arm64
+          path: dist
+      - uses: actions/download-artifact@v4
+        if: needs.build-mac-x64.result == 'success'
+        with:
+          name: aether-mac-x64
           path: dist
       - uses: actions/download-artifact@v4
         if: needs.build-win.result == 'success'
@@ -134,15 +200,19 @@ jobs:
       - run: ls -la dist
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || 'v0.1.6' }}
-          name: Aether ${{ github.ref_type == 'tag' && github.ref_name || 'v0.1.6' }}
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || 'v0.2.0' }}
+          name: Aether ${{ github.ref_type == 'tag' && github.ref_name || 'v0.2.0' }}
           generate_release_notes: true
           files: dist/*
           body: |
-            ## Downloads
+            ## Downloads（免安装 Python，下载即用）
             - macOS Apple Silicon: `Aether-*-mac-arm64.dmg`
             - macOS Intel: `Aether-*-mac-x64.dmg`
             - Windows setup: `Aether-*-win-x64-setup.exe`
             - Windows portable: `Aether-*-win-x64-portable.exe`
+
+            ### macOS 首次打开
+            若提示已损坏，执行：
+            `xattr -cr /Applications/Aether.app`
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
