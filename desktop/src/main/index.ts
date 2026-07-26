@@ -14,13 +14,19 @@ let mainWindow: BrowserWindow | null = null
 let apiProcess: ChildProcessWithoutNullStreams | null = null
 let apiReady = false
 let apiError = ''
+let quitting = false
 
 function emitStatus(extra?: Partial<{ ready: boolean; error: string }>) {
-  mainWindow?.webContents.send('api-status', {
-    ready: extra?.ready ?? apiReady,
-    baseUrl: API_BASE,
-    error: extra?.error ?? apiError
-  })
+  if (quitting || !mainWindow || mainWindow.isDestroyed()) return
+  try {
+    mainWindow.webContents.send('api-status', {
+      ready: extra?.ready ?? apiReady,
+      baseUrl: API_BASE,
+      error: extra?.error ?? apiError
+    })
+  } catch {
+    // window may be tearing down
+  }
 }
 
 function resolveAppIconPath(): string | undefined {
@@ -177,9 +183,16 @@ async function startApi(): Promise<void> {
 
 function stopApi(): void {
   if (!apiProcess) return
-  apiProcess.kill('SIGTERM')
+  const proc = apiProcess
   apiProcess = null
   apiReady = false
+  proc.removeAllListeners('exit')
+  proc.removeAllListeners('error')
+  try {
+    proc.kill('SIGTERM')
+  } catch {
+    // already exiting
+  }
 }
 
 function createWindow(): void {
@@ -204,6 +217,10 @@ function createWindow(): void {
   } else {
     void mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
+
+  mainWindow.on('closed', () => {
+    mainWindow = null
+  })
 }
 
 app.whenReady().then(() => {
@@ -231,10 +248,12 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
+  quitting = true
   stopApi()
   if (process.platform !== 'darwin') app.quit()
 })
 
 app.on('before-quit', () => {
+  quitting = true
   stopApi()
 })
