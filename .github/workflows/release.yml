@@ -32,28 +32,39 @@ jobs:
           cache: npm
           cache-dependency-path: desktop/package-lock.json
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Verify Electron binary
-        run: |
-          node -e "console.log(require('electron'))"
-          test -x "$(node -e "console.log(require('electron'))")"
-
-      - name: Build
-        run: npm run build
+      - run: npm ci
+      - run: npm run build
 
       - name: Package
-        run: npx electron-builder --mac dmg --arm64 --x64 --publish never
+        run: |
+          set -o pipefail
+          npx electron-builder --mac dmg --arm64 --x64 --publish never 2>&1 | tee package.log
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+      - name: Dump package log on failure
+        if: failure()
+        run: |
+          echo '----- package.log (tail) -----'
+          tail -n 120 package.log || true
+          # Surface into Actions annotations (readable via API)
+          tail -n 40 package.log | while IFS= read -r line; do
+            echo "::error::${line}"
+          done
+
+      - uses: actions/upload-artifact@v4
+        if: success()
         with:
           name: aether-mac
           path: desktop/release/*.dmg
           if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: aether-mac-log
+          path: desktop/package.log
+          if-no-files-found: ignore
 
   build-win:
     name: Build Windows
@@ -70,28 +81,42 @@ jobs:
           cache: npm
           cache-dependency-path: desktop/package-lock.json
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Verify Electron binary
-        shell: bash
-        run: |
-          node -e "console.log(require('electron'))"
-
-      - name: Build
-        run: npm run build
+      - run: npm ci
+      - run: npm run build
 
       - name: Package
-        run: npx electron-builder --win nsis portable --x64 --publish never
+        shell: bash
+        run: |
+          set -o pipefail
+          npx electron-builder --win nsis portable --x64 --publish never \
+            -c.win.signAndEditExecutable=false \
+            2>&1 | tee package.log
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+      - name: Dump package log on failure
+        if: failure()
+        shell: bash
+        run: |
+          echo '----- package.log (tail) -----'
+          tail -n 120 package.log || true
+          tail -n 40 package.log | while IFS= read -r line; do
+            echo "::error::${line}"
+          done
+
+      - uses: actions/upload-artifact@v4
+        if: success()
         with:
           name: aether-win
           path: desktop/release/*.exe
           if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: aether-win-log
+          path: desktop/package.log
+          if-no-files-found: ignore
 
   release:
     name: Publish GitHub Release
@@ -100,34 +125,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/download-artifact@v4
         with:
           name: aether-mac
           path: dist
-
       - uses: actions/download-artifact@v4
         with:
           name: aether-win
           path: dist
-
-      - name: List
-        run: ls -la dist
-
-      - name: Publish
-        uses: softprops/action-gh-release@v2
+      - run: ls -la dist
+      - uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || 'v0.1.1' }}
-          name: Aether ${{ github.ref_type == 'tag' && github.ref_name || 'v0.1.1' }}
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || 'v0.1.2' }}
+          name: Aether ${{ github.ref_type == 'tag' && github.ref_name || 'v0.1.2' }}
           generate_release_notes: true
           files: dist/*
           body: |
             ## Downloads
-            - macOS arm64: `Aether-*-mac-arm64.dmg`
-            - macOS x64: `Aether-*-mac-x64.dmg`
-            - Windows setup: `Aether-*-win-x64-setup.exe`
-            - Windows portable: `Aether-*-win-x64-portable.exe`
+            - macOS arm64 / x64 DMG
+            - Windows NSIS setup + portable exe
 
-            Requires local Python 3.10+ and `pip install -r requirements.txt` for bundled backend.
+            Requires local Python 3.10+ for the bundled backend (`pip install -r requirements.txt`).
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
