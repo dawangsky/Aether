@@ -11,13 +11,18 @@ export function getApiBaseUrl() {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${baseUrl}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers || {})
-    }
-  })
+  let res: Response
+  try {
+    res = await fetch(`${baseUrl}${path}`, {
+      ...init,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(init?.headers || {})
+      }
+    })
+  } catch {
+    throw new Error('无法连接本地 API（Failed to fetch）。请确认右上角状态为 LIVE，或重启应用等待依赖安装完成。')
+  }
   if (!res.ok) {
     let detail = res.statusText
     try {

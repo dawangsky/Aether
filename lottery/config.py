@@ -2,11 +2,21 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
-DATA_DIR = ROOT_DIR / "data"
+
+
+def _resolve_data_dir() -> Path:
+    override = os.environ.get("LOTTERY_DATA_DIR", "").strip()
+    if override:
+        return Path(override).expanduser().resolve()
+    return ROOT_DIR / "data"
+
+
+DATA_DIR = _resolve_data_dir()
 
 
 @dataclass(frozen=True)
