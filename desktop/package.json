@@ -1,9 +1,13 @@
 {
   "name": "lottery-desktop",
-  "version": "0.1.0",
+  "version": "0.1.4",
   "private": true,
   "description": "双色球/大乐透量化桌面端",
   "author": "Aether <aether@users.noreply.github.com>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dawangsky/Aether.git"
+  },
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
@@ -32,6 +36,7 @@
     "appId": "com.lottery.aether",
     "productName": "Aether",
     "copyright": "Copyright © Aether",
+    "publish": [],
     "directories": {
       "output": "release",
       "buildResources": "build"
