@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getApiBaseUrl, setApiBaseUrl } from './api/client'
+import ClosePrompt from './components/ClosePrompt.vue'
 import { applyTheme, loadTheme } from './themes'
 import logoUrl from './assets/logo.png'
 
@@ -14,7 +15,8 @@ const nav = [
   { path: '/ticket', code: '04', label: '下一期选号' },
   { path: '/backtest', code: '05', label: '回测台' },
   { path: '/check', code: '06', label: '中奖核对' },
-  { path: '/themes', code: '07', label: '界面主题' }
+  { path: '/themes', code: '07', label: '界面主题' },
+  { path: '/settings', code: '08', label: '设置' }
 ]
 
 const route = useRoute()
@@ -22,7 +24,9 @@ const router = useRouter()
 const status = ref<ApiStatus>({ ready: false, baseUrl: getApiBaseUrl(), error: '' })
 const clock = ref('')
 const apiBusy = ref(false)
+const closePromptOpen = ref(false)
 let off: (() => void) | undefined
+let offClose: (() => void) | undefined
 let timer: number | undefined
 
 const readyText = computed(() => (status.value.ready ? 'LIVE' : status.value.error ? 'DOWN' : 'SYNC'))
@@ -61,6 +65,17 @@ async function toggleApi() {
   }
 }
 
+async function onCloseDecide(action: 'tray' | 'quit' | 'cancel', remember: boolean) {
+  closePromptOpen.value = false
+  const bridge = window.lotteryDesktop
+  if (!bridge?.decideClose) return
+  try {
+    await bridge.decideClose({ action, remember })
+  } catch {
+    // ignore
+  }
+}
+
 onMounted(async () => {
   applyTheme(loadTheme())
   tick()
@@ -69,6 +84,9 @@ onMounted(async () => {
   if (bridge) {
     applyStatus(await bridge.getApiStatus())
     off = bridge.onApiStatus(applyStatus)
+    offClose = bridge.onClosePrompt?.(() => {
+      closePromptOpen.value = true
+    })
   } else {
     status.value = { ready: true, baseUrl: getApiBaseUrl(), error: '' }
   }
@@ -76,6 +94,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   off?.()
+  offClose?.()
   if (timer) window.clearInterval(timer)
 })
 </script>
@@ -150,5 +169,7 @@ onUnmounted(() => {
       <span>Aether · RESEARCH ONLY</span>
       <span>仅供研究娱乐 · 开奖随机 · <em>不构成投注建议</em></span>
     </footer>
+
+    <ClosePrompt v-model:open="closePromptOpen" @decide="onCloseDecide" />
   </div>
 </template>

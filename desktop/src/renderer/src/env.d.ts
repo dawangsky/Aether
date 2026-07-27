@@ -2,11 +2,26 @@
 
 type ApiStatus = { ready: boolean; baseUrl: string; error: string }
 
+type CloseDecision = {
+  action: 'tray' | 'quit' | 'cancel'
+  remember?: boolean
+}
+
+type ClosePreference = 'ask' | 'tray' | 'quit'
+
+type WindowPrefs = {
+  closeAction: ClosePreference
+}
+
 interface LotteryDesktopBridge {
   getApiStatus: () => Promise<ApiStatus>
   startApi: () => Promise<ApiStatus>
   stopApi: () => Promise<ApiStatus>
   onApiStatus: (cb: (status: ApiStatus) => void) => () => void
+  onClosePrompt: (cb: () => void) => () => void
+  decideClose: (decision: CloseDecision) => Promise<{ ok: boolean }>
+  getWindowPrefs: () => Promise<WindowPrefs>
+  setWindowPrefs: (prefs: Partial<WindowPrefs>) => Promise<WindowPrefs>
 }
 
 interface Window {

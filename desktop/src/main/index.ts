@@ -1,6 +1,13 @@
-import { app, BrowserWindow, ipcMain, nativeImage } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  ipcMain,
+  Menu,
+  nativeImage,
+  Tray
+} from 'electron'
 import { ChildProcessWithoutNullStreams, spawn } from 'node:child_process'
-import { copyFileSync, existsSync, mkdirSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -10,12 +17,17 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url))
 const DEFAULT_PORT = 8765
 const API_BASE = `http://127.0.0.1:${DEFAULT_PORT}`
 
+type CloseAction = 'tray' | 'quit'
+type ClosePreference = 'ask' | CloseAction
+
 let mainWindow: BrowserWindow | null = null
+let tray: Tray | null = null
 let apiProcess: ChildProcessWithoutNullStreams | null = null
 let apiReady = false
 let apiError = ''
 let quitting = false
 let startInFlight: Promise<void> | null = null
+let closePromptPending = false
 
 function statusPayload(extra?: Partial<{ ready: boolean; error: string }>) {
   return {
@@ -51,6 +63,39 @@ function resolveAppIcon() {
   if (!p) return undefined
   const img = nativeImage.createFromPath(p)
   return img.isEmpty() ? undefined : img
+}
+
+function trayIcon() {
+  const img = resolveAppIcon()
+  if (img) {
+    const size = process.platform === 'darwin' ? 18 : 16
+    return img.resize({ width: size, height: size })
+  }
+  return nativeImage.createEmpty()
+}
+
+function prefsPath() {
+  return join(app.getPath('userData'), 'window-prefs.json')
+}
+
+function loadClosePreference(): ClosePreference {
+  try {
+    const raw = JSON.parse(readFileSync(prefsPath(), 'utf8')) as { closeAction?: string }
+    if (raw.closeAction === 'tray' || raw.closeAction === 'quit' || raw.closeAction === 'ask') {
+      return raw.closeAction
+    }
+  } catch {
+    // first run / corrupt
+  }
+  return 'ask'
+}
+
+function saveClosePreference(action: ClosePreference) {
+  try {
+    writeFileSync(prefsPath(), JSON.stringify({ closeAction: action }, null, 2), 'utf8')
+  } catch {
+    // ignore persistence errors
+  }
 }
 
 function dataDir(): string {
@@ -223,6 +268,77 @@ function stopApi(manual = false): void {
   }
 }
 
+function showMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    createWindow()
+  } else {
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.show()
+    mainWindow.focus()
+  }
+  if (!apiReady && !apiProcess) void startApi()
+  else emitStatus()
+}
+
+function ensureTray() {
+  if (tray) return
+  const icon = trayIcon()
+  tray = new Tray(icon.isEmpty() ? nativeImage.createFromDataURL(
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAFUlEQVQ4T2NkYGD4z0BUYGwYRgYGADv+Ax0Vq0qNAAAAAElFTkSuQmCC'
+  ) : icon)
+  tray.setToolTip('Aether')
+  const menu = Menu.buildFromTemplate([
+    {
+      label: '显示窗口',
+      click: () => showMainWindow()
+    },
+    { type: 'separator' },
+    {
+      label: '退出程序',
+      click: () => {
+        quitting = true
+        stopApi()
+        app.quit()
+      }
+    }
+  ])
+  tray.setContextMenu(menu)
+  tray.on('click', () => showMainWindow())
+  tray.on('double-click', () => showMainWindow())
+}
+
+function hideToTray() {
+  ensureTray()
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.hide()
+  }
+}
+
+function requestClosePrompt() {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  if (closePromptPending) return
+  closePromptPending = true
+  mainWindow.show()
+  mainWindow.focus()
+  mainWindow.webContents.send('close-prompt')
+}
+
+function handleCloseIntent() {
+  if (quitting) return
+  const pref = loadClosePreference()
+  if (pref === 'tray') {
+    hideToTray()
+    return
+  }
+  if (pref === 'quit') {
+    quitting = true
+    stopApi()
+    app.quit()
+    return
+  }
+  requestClosePrompt()
+}
+
 function createWindow(): void {
   const icon = resolveAppIcon()
   mainWindow = new BrowserWindow({
@@ -246,6 +362,12 @@ function createWindow(): void {
     void mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
 
+  mainWindow.on('close', (e) => {
+    if (quitting) return
+    e.preventDefault()
+    handleCloseIntent()
+  })
+
   mainWindow.on('closed', () => {
     mainWindow = null
   })
@@ -268,37 +390,63 @@ app.whenReady().then(() => {
   })
   ipcMain.handle('stop-api', async () => {
     stopApi(true)
-    // wait briefly so port frees if user restarts immediately
     await new Promise((r) => setTimeout(r, 300))
     return statusPayload()
+  })
+  ipcMain.handle(
+    'close-decision',
+    (_evt, payload: { action: 'tray' | 'quit' | 'cancel'; remember?: boolean }) => {
+      closePromptPending = false
+      const action = payload?.action
+      if ((action === 'tray' || action === 'quit') && payload.remember) {
+        saveClosePreference(action)
+      }
+      if (action === 'tray') {
+        hideToTray()
+        return { ok: true }
+      }
+      if (action === 'quit') {
+        quitting = true
+        stopApi()
+        app.quit()
+        return { ok: true }
+      }
+      return { ok: true }
+    }
+  )
+  ipcMain.handle('get-window-prefs', () => ({
+    closeAction: loadClosePreference()
+  }))
+  ipcMain.handle('set-window-prefs', (_evt, payload: { closeAction?: ClosePreference }) => {
+    const next = payload?.closeAction
+    if (next === 'ask' || next === 'tray' || next === 'quit') {
+      saveClosePreference(next)
+    }
+    return { closeAction: loadClosePreference() }
   })
 
   createWindow()
   void startApi()
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow()
-    }
-    // 关掉窗口后再打开：确保 API 被重新拉起
-    if (!apiReady && !apiProcess) {
-      void startApi()
-    } else {
-      emitStatus()
-    }
+    showMainWindow()
   })
 })
 
 app.on('window-all-closed', () => {
-  // macOS 关闭窗口不退出应用，也不要停掉 API；仅非 darwin 退出。
-  if (process.platform !== 'darwin') {
-    quitting = true
-    stopApi()
-    app.quit()
-  }
+  // 托盘后台运行时不退出；macOS 也保持进程。
+  if (tray && !quitting) return
+  if (process.platform === 'darwin' && !quitting) return
+  quitting = true
+  stopApi()
+  app.quit()
 })
 
 app.on('before-quit', () => {
   quitting = true
   stopApi()
+  if (tray) {
+    tray.destroy()
+    tray = null
+  }
 })
