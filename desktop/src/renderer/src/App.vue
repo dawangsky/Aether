@@ -11,9 +11,10 @@ const nav = [
   { path: '/draws', code: '01', label: '开奖行情' },
   { path: '/analyze', code: '02', label: '因子分析' },
   { path: '/predict', code: '03', label: '信号生成' },
-  { path: '/backtest', code: '04', label: '回测台' },
-  { path: '/check', code: '05', label: '中奖核对' },
-  { path: '/themes', code: '06', label: '界面主题' }
+  { path: '/ticket', code: '04', label: '下一期选号' },
+  { path: '/backtest', code: '05', label: '回测台' },
+  { path: '/check', code: '06', label: '中奖核对' },
+  { path: '/themes', code: '07', label: '界面主题' }
 ]
 
 const route = useRoute()

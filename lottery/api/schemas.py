@@ -117,3 +117,38 @@ class CheckResponse(BaseModel):
     won: bool
     total_prize: int | None = None
     prize_source: str = "none"
+
+
+class TicketPlanRequest(BaseModel):
+    game: GameKey
+    mode: Literal["single", "compound"] = "single"
+    main_count: int | None = Field(
+        default=None, description="复式主区个数；单式可省略，按彩种默认"
+    )
+    special_count: int | None = Field(
+        default=None, description="复式特区个数；单式可省略，按彩种默认"
+    )
+    window: int = Field(default=50, ge=10, le=200)
+    seed: int | None = 42
+
+
+class TicketQuoteRequest(BaseModel):
+    game: GameKey
+    main: list[int] = Field(..., min_length=1)
+    special: list[int] = Field(..., min_length=1)
+
+
+class TicketPlanResponse(BaseModel):
+    game: GameKey
+    mode: str
+    main: list[int]
+    special: list[int]
+    formatted: str
+    formula: str
+    unit_bets: str
+    bets: int
+    price_per_bet: int
+    cost: int
+    last_issue: str | None = None
+    main_count: int
+    special_count: int

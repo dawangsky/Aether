@@ -18,6 +18,9 @@ from lottery.api.schemas import (
     PredictResponse,
     PrizeLevelItem,
     TicketItem,
+    TicketPlanRequest,
+    TicketPlanResponse,
+    TicketQuoteRequest,
     UpdateRequest,
     UpdateResponse,
     UpdateResultItem,
@@ -28,6 +31,7 @@ from lottery.config import GAMES, get_game
 from lottery.data.fetcher import update_game, update_games
 from lottery.data.loader import load_draws
 from lottery.predict.generator import generate_tickets
+from lottery.ticket import generate_pool, ticket_cost
 
 router = APIRouter()
 
@@ -186,4 +190,57 @@ def check(body: CheckRequest) -> CheckResponse:
         won=result.won,
         total_prize=result.total_prize,
         prize_source=result.prize_source,
+    )
+
+
+@router.post("/ticket/plan", response_model=TicketPlanResponse)
+def ticket_plan(body: TicketPlanRequest) -> TicketPlanResponse:
+    cfg = get_game(body.game)
+    draws = _ensure_draws(body.game, min_count=5)
+    window_draws = draws[-body.window :] if len(draws) > body.window else draws
+    if body.mode == "single":
+        main_count = cfg.main_count
+        special_count = cfg.special_count
+    else:
+        main_count = body.main_count if body.main_count is not None else cfg.main_count + 1
+        special_count = body.special_count if body.special_count is not None else cfg.special_count
+    try:
+        payload = generate_pool(
+            cfg,
+            window_draws,
+            main_count=main_count,
+            special_count=special_count,
+            seed=body.seed,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return TicketPlanResponse(**payload)  # type: ignore[arg-type]
+
+
+@router.post("/ticket/quote", response_model=TicketPlanResponse)
+def ticket_quote(body: TicketQuoteRequest) -> TicketPlanResponse:
+    cfg = get_game(body.game)
+    main = sorted(set(body.main))
+    special = sorted(set(body.special))
+    if len(main) != len(body.main) or len(special) != len(body.special):
+        raise HTTPException(status_code=400, detail="号码不可重复")
+    for n in main:
+        if n not in cfg.main_range:
+            raise HTTPException(status_code=400, detail=f"主区号码越界: {n}")
+    for n in special:
+        if n not in cfg.special_range:
+            raise HTTPException(status_code=400, detail=f"特区号码越界: {n}")
+    try:
+        quote = ticket_cost(cfg, len(main), len(special))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return TicketPlanResponse(
+        game=body.game,
+        main=main,
+        special=special,
+        formatted=" ".join(f"{n:02d}" for n in main)
+        + " + "
+        + " ".join(f"{n:02d}" for n in special),
+        last_issue=None,
+        **quote,
     )

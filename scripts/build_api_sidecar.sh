@@ -40,6 +40,8 @@ rm -rf "$ROOT/build/pyinstaller" "$ROOT/dist/aether-api" "$ROOT/dist/aether-api.
   --collect-all uvicorn \
   --collect-all fastapi \
   --collect-submodules pydantic \
+  --hidden-import lottery.ticket \
+  --collect-submodules lottery \
   lottery/api/sidecar.py
 
 BIN_SRC="$ROOT/dist/aether-api"

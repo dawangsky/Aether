@@ -59,5 +59,15 @@ export const api = {
     seed?: number
   }) => request<any>('/backtest', { method: 'POST', body: JSON.stringify(body) }),
   check: (body: { game: GameKey; issue: string; main: number[]; special: number[] }) =>
-    request<any>('/check', { method: 'POST', body: JSON.stringify(body) })
+    request<any>('/check', { method: 'POST', body: JSON.stringify(body) }),
+  ticketPlan: (body: {
+    game: GameKey
+    mode: 'single' | 'compound'
+    main_count?: number | null
+    special_count?: number | null
+    window?: number
+    seed?: number | null
+  }) => request<any>('/ticket/plan', { method: 'POST', body: JSON.stringify(body) }),
+  ticketQuote: (body: { game: GameKey; main: number[]; special: number[] }) =>
+    request<any>('/ticket/quote', { method: 'POST', body: JSON.stringify(body) })
 }
