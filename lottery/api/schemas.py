@@ -63,14 +63,6 @@ class TicketItem(BaseModel):
     meta: dict[str, Any] = Field(default_factory=dict)
 
 
-class PredictResponse(BaseModel):
-    game: GameKey
-    window: int
-    last_issue: str
-    tickets: list[TicketItem]
-    disclaimer: str = "仅供研究娱乐，开奖随机，不构成投注建议。"
-
-
 class BacktestRequest(BaseModel):
     game: GameKey
     window: int = Field(default=30, ge=10, le=200)
@@ -121,6 +113,18 @@ class CheckResponse(BaseModel):
     won: bool
     total_prize: int | None = None
     prize_source: str = "none"
+
+
+class PredictResponse(BaseModel):
+    game: GameKey
+    window: int
+    last_issue: str
+    tickets: list[TicketItem]
+    disclaimer: str = "仅供研究娱乐，开奖随机，不构成投注建议。"
+    target_issue: str | None = None
+    target_draw_date: str | None = None
+    target_draw_formatted: str | None = None
+    checks: list[CheckResponse] = Field(default_factory=list)
 
 
 class TicketPlanRequest(BaseModel):

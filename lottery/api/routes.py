@@ -106,15 +106,50 @@ def analyze(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+def _to_check_response(game: str, result) -> CheckResponse:
+    return CheckResponse(
+        game=game,  # type: ignore[arg-type]
+        issue=result.issue,
+        draw_date=result.draw_date,
+        draw_formatted=result.draw_formatted,
+        ticket_formatted=result.ticket_formatted,
+        mode=result.mode,
+        main_selected=result.main_selected,
+        special_selected=result.special_selected,
+        main_hit=result.main_hit,
+        special_hit=result.special_hit,
+        total_bets=result.total_bets,
+        winning_bets=result.winning_bets,
+        levels=[
+            PrizeLevelItem(
+                prize_level=x.prize_level,
+                prize_name=x.prize_name,
+                rule=x.rule,
+                count=x.count,
+                unit_prize=x.unit_prize,
+                amount=x.amount,
+            )
+            for x in result.levels
+        ],
+        prize_level=result.prize_level,
+        prize_name=result.prize_name,
+        rule=result.rule,
+        won=result.won,
+        total_prize=result.total_prize,
+        prize_source=result.prize_source,
+    )
+
+
 @router.post("/predict", response_model=PredictResponse)
 def predict(body: PredictRequest) -> PredictResponse:
     cfg = get_game(body.game)
-    draws = _ensure_draws(body.game, min_count=5)
+    all_draws = _ensure_draws(body.game, min_count=5)
+    draws = all_draws
     if body.as_of_issue:
-        idx = next((i for i, d in enumerate(draws) if d.issue == body.as_of_issue), None)
+        idx = next((i for i, d in enumerate(all_draws) if d.issue == body.as_of_issue), None)
         if idx is None:
             raise HTTPException(status_code=404, detail=f"未找到期号: {body.as_of_issue}")
-        draws = draws[: idx + 1]
+        draws = all_draws[: idx + 1]
         if len(draws) < 5:
             raise HTTPException(
                 status_code=400,
@@ -125,10 +160,30 @@ def predict(body: PredictRequest) -> PredictResponse:
         tickets = generate_tickets(cfg, window_draws, n=body.n, seed=body.seed)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    ref_issue = window_draws[-1].issue
+    target_issue = None
+    target_draw_date = None
+    target_draw_formatted = None
+    checks: list[CheckResponse] = []
+    ref_idx = next((i for i, d in enumerate(all_draws) if d.issue == ref_issue), None)
+    if ref_idx is not None and ref_idx + 1 < len(all_draws):
+        target = all_draws[ref_idx + 1]
+        target_issue = target.issue
+        target_draw_date = target.date
+        target_draw_formatted = (
+            " ".join(f"{n:02d}" for n in target.main_sorted())
+            + " + "
+            + " ".join(f"{n:02d}" for n in target.special_sorted())
+        )
+        for t in tickets:
+            pr = check_prize(body.game, target.issue, list(t.main), list(t.special), all_draws)
+            checks.append(_to_check_response(body.game, pr))
+
     return PredictResponse(
         game=body.game,
         window=len(window_draws),
-        last_issue=window_draws[-1].issue,
+        last_issue=ref_issue,
         tickets=[
             TicketItem(
                 main=list(t.main),
@@ -138,6 +193,10 @@ def predict(body: PredictRequest) -> PredictResponse:
             )
             for t in tickets
         ],
+        target_issue=target_issue,
+        target_draw_date=target_draw_date,
+        target_draw_formatted=target_draw_formatted,
+        checks=checks,
     )
 
 
@@ -170,37 +229,7 @@ def check(body: CheckRequest) -> CheckResponse:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return CheckResponse(
-        game=body.game,  # type: ignore[arg-type]
-        issue=result.issue,
-        draw_date=result.draw_date,
-        draw_formatted=result.draw_formatted,
-        ticket_formatted=result.ticket_formatted,
-        mode=result.mode,
-        main_selected=result.main_selected,
-        special_selected=result.special_selected,
-        main_hit=result.main_hit,
-        special_hit=result.special_hit,
-        total_bets=result.total_bets,
-        winning_bets=result.winning_bets,
-        levels=[
-            PrizeLevelItem(
-                prize_level=x.prize_level,
-                prize_name=x.prize_name,
-                rule=x.rule,
-                count=x.count,
-                unit_prize=x.unit_prize,
-                amount=x.amount,
-            )
-            for x in result.levels
-        ],
-        prize_level=result.prize_level,
-        prize_name=result.prize_name,
-        rule=result.rule,
-        won=result.won,
-        total_prize=result.total_prize,
-        prize_source=result.prize_source,
-    )
+    return _to_check_response(body.game, result)
 
 
 @router.post("/ticket/plan", response_model=TicketPlanResponse)

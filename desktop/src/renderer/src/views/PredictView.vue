@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { api, type GameKey } from '../api/client'
 
 type IssueOption = { issue: string; date: string }
@@ -14,6 +14,19 @@ const loadingIssues = ref(false)
 const loading = ref(false)
 const error = ref('')
 const result = ref<any>(null)
+
+const hasTargetDraw = computed(
+  () => !!(result.value?.target_issue && result.value?.checks?.length)
+)
+
+function pad(n: number) {
+  return String(n).padStart(2, '0')
+}
+
+function formatMoney(n: number | null | undefined) {
+  if (n == null || Number.isNaN(n)) return '—'
+  return `${Number(n).toLocaleString('zh-CN')} 元`
+}
 
 async function loadIssues(preferLatest = true) {
   loadingIssues.value = true
@@ -49,6 +62,7 @@ async function run() {
   }
   loading.value = true
   error.value = ''
+  result.value = null
   try {
     result.value = await api.predict({
       game: game.value,
@@ -79,7 +93,7 @@ onMounted(() => {
     <div class="page-head">
       <div>
         <h1>信号生成</h1>
-        <p class="lead">可选任意历史期号回看 · 约束采样 · 仅供研究参考</p>
+        <p class="lead">可选历史期号回看 · 若下一期已开奖则自动对照核对</p>
       </div>
       <div class="panel-id">SIGNAL</div>
     </div>
@@ -124,7 +138,7 @@ onMounted(() => {
     </div>
 
     <p class="muted">
-      参考期号为历史截止点：只用该期及之前的数据生成信号，便于回看当时会给出什么推荐。
+      参考期号为历史截止点；信号对应「下一期」。若下一期号码已在本地，将在每张信号单下方显示中奖对照。
     </p>
 
     <p v-if="error" class="error">{{ error }}</p>
@@ -140,27 +154,37 @@ onMounted(() => {
           <div class="value flat">{{ result.last_issue }}</div>
         </div>
         <div class="metric">
+          <div class="label">对照期号</div>
+          <div class="value flat">{{ result.target_issue || '尚未开奖' }}</div>
+        </div>
+        <div class="metric">
           <div class="label">信号注数</div>
           <div class="value">{{ result.tickets.length }}</div>
         </div>
-        <div class="metric">
-          <div class="label">Edge</div>
-          <div class="value ask">N/A</div>
-        </div>
       </div>
+
+      <p v-if="hasTargetDraw" class="muted">
+        对照开奖 {{ result.target_issue }}（{{ result.target_draw_date }}）：{{
+          result.target_draw_formatted
+        }}
+      </p>
+      <p v-else-if="result.target_issue == null" class="muted">
+        参考期之后尚无开奖数据，无法做中奖对照（通常选最新期时如此）。
+      </p>
 
       <div class="panel" v-for="(t, idx) in result.tickets" :key="idx">
         <div class="panel-hd">
           <span>信号单 {{ String(idx + 1).padStart(2, '0') }}</span>
-          <span>SUM {{ t.meta.sum }}</span>
+          <span v-if="result.checks?.[idx]" :class="result.checks[idx].won ? 'bid' : 'ask'">
+            {{ result.checks[idx].won ? result.checks[idx].prize_name : '未中奖' }}
+          </span>
+          <span v-else>SUM {{ t.meta.sum }}</span>
         </div>
         <div class="panel-bd">
           <div class="balls" style="margin-bottom: 10px">
-            <span v-for="num in t.main" :key="'m' + num" class="ball main">{{
-              String(num).padStart(2, '0')
-            }}</span>
+            <span v-for="num in t.main" :key="'m' + num" class="ball main">{{ pad(num) }}</span>
             <span v-for="num in t.special" :key="'s' + num" class="ball special">{{
-              String(num).padStart(2, '0')
+              pad(num)
             }}</span>
           </div>
           <div class="kv">
@@ -173,6 +197,61 @@ onMounted(() => {
             <div class="k">遗漏层</div>
             <div class="v">{{ t.meta.bands }}</div>
           </div>
+
+          <template v-if="result.checks?.[idx]">
+            <div class="check-block">
+              <div class="check-block__title">中奖对照 · {{ result.checks[idx].issue }}</div>
+              <div class="kv">
+                <div class="k">开奖号码</div>
+                <div class="v">{{ result.checks[idx].draw_formatted }}</div>
+                <div class="k">投注号码</div>
+                <div class="v">{{ result.checks[idx].ticket_formatted }}</div>
+                <div class="k">模式 / 注数</div>
+                <div class="v">
+                  {{ result.checks[idx].mode === 'single' ? '单式' : '复式' }} ·
+                  {{ result.checks[idx].total_bets }} 注 · 中
+                  {{ result.checks[idx].winning_bets }} 注
+                </div>
+                <div class="k">命中池</div>
+                <div class="v">
+                  主区 {{ result.checks[idx].main_hit }}/{{ result.checks[idx].main_selected }} ·
+                  特区 {{ result.checks[idx].special_hit }}/{{
+                    result.checks[idx].special_selected
+                  }}
+                </div>
+                <div class="k">奖金</div>
+                <div class="v">
+                  {{ formatMoney(result.checks[idx].total_prize) }} ·
+                  {{ result.checks[idx].rule }}
+                </div>
+              </div>
+              <table
+                v-if="result.checks[idx].levels?.length"
+                class="data"
+                style="margin-top: 12px"
+              >
+                <thead>
+                  <tr>
+                    <th>奖等 / 规则</th>
+                    <th class="num">单注奖金</th>
+                    <th class="num">注数</th>
+                    <th class="num">中奖奖金</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="lv in result.checks[idx].levels"
+                    :key="lv.prize_level + lv.rule"
+                  >
+                    <td>{{ lv.prize_name }} {{ lv.rule }}</td>
+                    <td class="num">{{ formatMoney(lv.unit_prize) }}</td>
+                    <td class="num">{{ lv.count }}</td>
+                    <td class="num">{{ formatMoney(lv.amount) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </template>
         </div>
       </div>
 
@@ -180,3 +259,19 @@ onMounted(() => {
     </template>
   </section>
 </template>
+
+<style scoped>
+.check-block {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line);
+}
+
+.check-block__title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+  letter-spacing: 0.04em;
+}
+</style>
