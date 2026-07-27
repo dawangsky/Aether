@@ -50,6 +50,10 @@ class PredictRequest(BaseModel):
     n: int = Field(default=2, ge=1, le=20)
     window: int = Field(default=50, ge=10, le=300)
     seed: int | None = None
+    as_of_issue: str | None = Field(
+        default=None,
+        description="参考截止期号；仅使用该期及之前的历史生成，便于回看",
+    )
 
 
 class TicketItem(BaseModel):

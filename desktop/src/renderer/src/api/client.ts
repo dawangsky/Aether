@@ -49,8 +49,13 @@ export const api = {
     }),
   analyze: (game: GameKey, window = 50) =>
     request<any>(`/analyze?game=${game}&window=${window}`),
-  predict: (body: { game: GameKey; n: number; window?: number; seed?: number | null }) =>
-    request<any>('/predict', { method: 'POST', body: JSON.stringify(body) }),
+  predict: (body: {
+    game: GameKey
+    n: number
+    window?: number
+    seed?: number | null
+    as_of_issue?: string | null
+  }) => request<any>('/predict', { method: 'POST', body: JSON.stringify(body) }),
   backtest: (body: {
     game: GameKey
     window: number

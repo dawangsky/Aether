@@ -3,47 +3,61 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { api, type GameKey } from '../api/client'
 
 type IssueOption = { issue: string; date: string; formatted: string }
+type TicketDraft = { id: number; main: number[]; special: number[] }
+type TicketResult = { index: number; ok: boolean; error?: string; data?: any }
+
+let ticketSeq = 1
+function emptyTicket(): TicketDraft {
+  return { id: ticketSeq++, main: [], special: [] }
+}
 
 const game = ref<GameKey>('ssq')
 const issue = ref('')
 const issues = ref<IssueOption[]>([])
 const loadingIssues = ref(false)
-const selectedMain = ref<number[]>([])
-const selectedSpecial = ref<number[]>([])
+const tickets = ref<TicketDraft[]>([emptyTicket()])
 const loading = ref(false)
 const error = ref('')
-const result = ref<any>(null)
+const results = ref<TicketResult[] | null>(null)
 
 const mainMax = computed(() => (game.value === 'ssq' ? 33 : 35))
 const specialMax = computed(() => (game.value === 'ssq' ? 16 : 12))
 const mainNeed = computed(() => (game.value === 'ssq' ? 6 : 5))
 const specialNeed = computed(() => (game.value === 'ssq' ? 1 : 2))
-
 const mainNums = computed(() => Array.from({ length: mainMax.value }, (_, i) => i + 1))
 const specialNums = computed(() => Array.from({ length: specialMax.value }, (_, i) => i + 1))
-
-/** 红球/前区均分 3 行；蓝球/后区均分 2 行 */
 const mainCols = computed(() => Math.ceil(mainMax.value / 3))
 const specialCols = computed(() => Math.ceil(specialMax.value / 2))
-
 const mainLabel = computed(() => (game.value === 'ssq' ? '红球' : '前区'))
 const specialLabel = computed(() => (game.value === 'ssq' ? '蓝球' : '后区'))
-
 const selectedDraw = computed(() => issues.value.find((x) => x.issue === issue.value) || null)
 
-const canSubmit = computed(
-  () =>
-    !!issue.value &&
-    selectedMain.value.length >= mainNeed.value &&
-    selectedSpecial.value.length >= specialNeed.value
+const readyTickets = computed(() =>
+  tickets.value.filter(
+    (t) => t.main.length >= mainNeed.value && t.special.length >= specialNeed.value
+  )
 )
 
-const modeHint = computed(() => {
-  const m = selectedMain.value.length
-  const s = selectedSpecial.value.length
-  if (m === mainNeed.value && s === specialNeed.value) return '单式'
-  if (m > mainNeed.value || s > specialNeed.value) return '复式'
-  return '选号中'
+const canSubmit = computed(() => !!issue.value && readyTickets.value.length > 0)
+
+const summary = computed(() => {
+  if (!results.value?.length) return null
+  const ok = results.value.filter((r) => r.ok && r.data)
+  const won = ok.filter((r) => r.data.won)
+  const totalBets = ok.reduce((s, r) => s + (r.data.total_bets || 0), 0)
+  const winningBets = ok.reduce((s, r) => s + (r.data.winning_bets || 0), 0)
+  const prizes = ok.map((r) => r.data.total_prize as number | null)
+  const totalPrize = prizes.every((p) => p != null)
+    ? prizes.reduce((s, p) => s + (p || 0), 0)
+    : null
+  return {
+    groups: results.value.length,
+    ok: ok.length,
+    won: won.length,
+    totalBets,
+    winningBets,
+    totalPrize
+  }
 })
 
 function pad(n: number) {
@@ -55,35 +69,56 @@ function formatMoney(n: number | null | undefined) {
   return `${Number(n).toLocaleString('zh-CN')} 元`
 }
 
-function toggleMain(n: number) {
-  const set = new Set(selectedMain.value)
+function modeOf(t: TicketDraft) {
+  const m = t.main.length
+  const s = t.special.length
+  if (m === mainNeed.value && s === specialNeed.value) return '单式'
+  if (m >= mainNeed.value && s >= specialNeed.value) return '复式'
+  return '选号中'
+}
+
+function toggleMain(ti: number, n: number) {
+  const t = tickets.value[ti]
+  const set = new Set(t.main)
   if (set.has(n)) set.delete(n)
   else set.add(n)
-  selectedMain.value = [...set].sort((a, b) => a - b)
-  result.value = null
+  t.main = [...set].sort((a, b) => a - b)
+  results.value = null
 }
 
-function toggleSpecial(n: number) {
-  const set = new Set(selectedSpecial.value)
+function toggleSpecial(ti: number, n: number) {
+  const t = tickets.value[ti]
+  const set = new Set(t.special)
   if (set.has(n)) set.delete(n)
   else set.add(n)
-  selectedSpecial.value = [...set].sort((a, b) => a - b)
-  result.value = null
+  t.special = [...set].sort((a, b) => a - b)
+  results.value = null
 }
 
-function clearMain() {
-  selectedMain.value = []
-  result.value = null
+function clearTicket(ti: number) {
+  tickets.value[ti].main = []
+  tickets.value[ti].special = []
+  results.value = null
 }
 
-function clearSpecial() {
-  selectedSpecial.value = []
-  result.value = null
+function addTicketAfter(ti: number) {
+  tickets.value.splice(ti + 1, 0, emptyTicket())
+  results.value = null
+}
+
+function removeTicket(ti: number) {
+  if (tickets.value.length <= 1) {
+    clearTicket(0)
+    return
+  }
+  tickets.value.splice(ti, 1)
+  results.value = null
 }
 
 function clearAll() {
-  clearMain()
-  clearSpecial()
+  tickets.value = [emptyTicket()]
+  results.value = null
+  error.value = ''
 }
 
 async function loadIssues(preferLatest = true) {
@@ -144,47 +179,73 @@ function fillExample(kind: 'single' | 'compound') {
     return
   }
   const parsed = parseDrawNumbers(draw)
+  const t = tickets.value[0] || emptyTicket()
+  if (!tickets.value.length) tickets.value = [t]
   if (kind === 'single') {
-    selectedMain.value = [...parsed.main].sort((a, b) => a - b)
-    selectedSpecial.value = [...parsed.special].sort((a, b) => a - b)
+    t.main = [...parsed.main].sort((a, b) => a - b)
+    t.special = [...parsed.special].sort((a, b) => a - b)
   } else if (game.value === 'ssq') {
     const extraMain = [1, 5].filter((n) => !parsed.main.includes(n))
     const extraBlue = [5].filter((n) => !parsed.special.includes(n))
-    selectedMain.value = [...parsed.main, ...extraMain].sort((a, b) => a - b)
-    selectedSpecial.value = [...parsed.special, ...extraBlue].sort((a, b) => a - b)
+    t.main = [...parsed.main, ...extraMain].sort((a, b) => a - b)
+    t.special = [...parsed.special, ...extraBlue].sort((a, b) => a - b)
   } else {
     const extraMain = [1].filter((n) => !parsed.main.includes(n))
     const extraBack = [2].filter((n) => !parsed.special.includes(n))
-    selectedMain.value = [...parsed.main, ...extraMain].sort((a, b) => a - b)
-    selectedSpecial.value = [...parsed.special, ...extraBack].sort((a, b) => a - b)
+    t.main = [...parsed.main, ...extraMain].sort((a, b) => a - b)
+    t.special = [...parsed.special, ...extraBack].sort((a, b) => a - b)
   }
-  result.value = null
+  results.value = null
 }
 
 async function run() {
-  if (!canSubmit.value) {
-    error.value = `请至少选择 ${mainNeed.value} 个${mainLabel.value}、${specialNeed.value} 个${specialLabel.value}`
+  if (!issue.value) {
+    error.value = '请选择期号'
+    return
+  }
+  const ready = readyTickets.value
+  if (!ready.length) {
+    error.value = `请至少完整填写一组：${mainNeed.value} 个${mainLabel.value}、${specialNeed.value} 个${specialLabel.value}`
     return
   }
   loading.value = true
   error.value = ''
-  result.value = null
+  results.value = null
   try {
-    result.value = await api.check({
-      game: game.value,
-      issue: issue.value,
-      main: selectedMain.value,
-      special: selectedSpecial.value
-    })
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : String(e)
+    const out: TicketResult[] = []
+    for (let i = 0; i < tickets.value.length; i++) {
+      const t = tickets.value[i]
+      if (t.main.length < mainNeed.value || t.special.length < specialNeed.value) {
+        out.push({ index: i + 1, ok: false, error: '选号未完成，已跳过' })
+        continue
+      }
+      try {
+        const data = await api.check({
+          game: game.value,
+          issue: issue.value,
+          main: t.main,
+          special: t.special
+        })
+        out.push({ index: i + 1, ok: true, data })
+      } catch (e) {
+        out.push({
+          index: i + 1,
+          ok: false,
+          error: e instanceof Error ? e.message : String(e)
+        })
+      }
+    }
+    results.value = out
+    if (out.every((r) => !r.ok)) {
+      error.value = out.find((r) => r.error)?.error || '核对失败'
+    }
   } finally {
     loading.value = false
   }
 }
 
 watch(game, () => {
-  result.value = null
+  results.value = null
   clearAll()
   void loadIssues(true)
 })
@@ -199,7 +260,7 @@ onMounted(() => {
     <div class="page-head">
       <div>
         <h1>中奖核对</h1>
-        <p class="lead">点击号码选号 · 支持单式 / 复式</p>
+        <p class="lead">支持多组号码 · 单式 / 复式 · 组后可继续加一组</p>
       </div>
       <div class="panel-id">CHECK</div>
     </div>
@@ -225,165 +286,209 @@ onMounted(() => {
       <button class="btn secondary" :disabled="loadingIssues" @click="syncAndReload">同步最新</button>
       <button class="btn secondary" :disabled="!issue" @click="fillExample('single')">单式示例</button>
       <button class="btn secondary" :disabled="!issue" @click="fillExample('compound')">复式示例</button>
-      <button class="btn secondary" @click="clearAll">清空选号</button>
-      <button class="btn" :disabled="loading || !canSubmit" @click="run">核对</button>
+      <button class="btn secondary" @click="clearAll">清空全部</button>
+      <button class="btn" :disabled="loading || !canSubmit" @click="run">
+        核对（{{ readyTickets.length }} 组）
+      </button>
     </div>
 
     <p v-if="selectedDraw" class="muted">当前开奖：{{ selectedDraw.formatted }}</p>
 
-    <div class="metric-row">
-      <div class="metric">
-        <div class="label">已选{{ mainLabel }}</div>
-        <div class="value flat">{{ selectedMain.length }}</div>
-      </div>
-      <div class="metric">
-        <div class="label">已选{{ specialLabel }}</div>
-        <div class="value flat">{{ selectedSpecial.length }}</div>
-      </div>
-      <div class="metric">
-        <div class="label">投注形态</div>
-        <div class="value">{{ modeHint }}</div>
-      </div>
-      <div class="metric">
-        <div class="label">最少要求</div>
-        <div class="value" style="font-size: 14px">{{ mainNeed }}+{{ specialNeed }}</div>
-      </div>
-    </div>
-
-    <div class="panel">
-      <div class="panel-hd">
-        <span>{{ mainLabel }}（点击选择，≥{{ mainNeed }}）</span>
-        <button class="btn secondary" style="height: 24px; padding: 0 8px" @click="clearMain">清空</button>
-      </div>
-      <div class="panel-bd">
-        <div
-          class="pick-grid"
-          :style="{ gridTemplateColumns: `repeat(${mainCols}, minmax(0, 1fr))` }"
-        >
-          <button
-            v-for="n in mainNums"
-            :key="'m' + n"
-            type="button"
-            class="pick-num main"
-            :class="{ on: selectedMain.includes(n) }"
-            @click="toggleMain(n)"
-          >
-            {{ pad(n) }}
-          </button>
-        </div>
-        <div class="balls pick-selected" v-if="selectedMain.length">
-          <span v-for="n in selectedMain" :key="'sm' + n" class="ball main">{{ pad(n) }}</span>
-        </div>
-      </div>
-    </div>
-
-    <div class="panel">
-      <div class="panel-hd">
-        <span>{{ specialLabel }}（点击选择，≥{{ specialNeed }}）</span>
-        <button class="btn secondary" style="height: 24px; padding: 0 8px" @click="clearSpecial">清空</button>
-      </div>
-      <div class="panel-bd">
-        <div
-          class="pick-grid"
-          :style="{ gridTemplateColumns: `repeat(${specialCols}, minmax(0, 1fr))` }"
-        >
-          <button
-            v-for="n in specialNums"
-            :key="'s' + n"
-            type="button"
-            class="pick-num special"
-            :class="{ on: selectedSpecial.includes(n) }"
-            @click="toggleSpecial(n)"
-          >
-            {{ pad(n) }}
-          </button>
-        </div>
-        <div class="balls pick-selected" v-if="selectedSpecial.length">
-          <span v-for="n in selectedSpecial" :key="'ss' + n" class="ball special">{{ pad(n) }}</span>
-        </div>
-      </div>
-    </div>
-
-    <p v-if="error" class="error">{{ error }}</p>
-
-    <template v-if="result">
+    <div v-for="(t, ti) in tickets" :key="t.id" class="ticket-block">
       <div class="metric-row">
         <div class="metric">
-          <div class="label">模式</div>
-          <div class="value flat">{{ result.mode === 'single' ? '单式' : '复式' }}</div>
+          <div class="label">第 {{ ti + 1 }} 组</div>
+          <div class="value flat">{{ modeOf(t) }}</div>
         </div>
         <div class="metric">
-          <div class="label">总注数</div>
-          <div class="value">{{ result.total_bets }}</div>
+          <div class="label">已选{{ mainLabel }}</div>
+          <div class="value flat">{{ t.main.length }}</div>
         </div>
         <div class="metric">
-          <div class="label">中奖注数</div>
-          <div class="value" :class="result.won ? 'bid' : 'ask'">{{ result.winning_bets }}</div>
+          <div class="label">已选{{ specialLabel }}</div>
+          <div class="value flat">{{ t.special.length }}</div>
         </div>
         <div class="metric">
-          <div class="label">最高奖等</div>
-          <div class="value" :class="result.won ? 'bid' : 'ask'">{{ result.prize_name }}</div>
+          <div class="label">最少要求</div>
+          <div class="value" style="font-size: 14px">{{ mainNeed }}+{{ specialNeed }}</div>
         </div>
-        <div class="metric">
-          <div class="label">奖金合计</div>
-          <div class="value" :class="result.won ? 'bid' : 'ask'">
-            {{ formatMoney(result.total_prize) }}
+      </div>
+
+      <div class="panel">
+        <div class="panel-hd">
+          <span>{{ mainLabel }}（≥{{ mainNeed }}）</span>
+          <button class="btn secondary" style="height: 24px; padding: 0 8px" @click="clearTicket(ti)">
+            清空本组
+          </button>
+        </div>
+        <div class="panel-bd">
+          <div
+            class="pick-grid"
+            :style="{ gridTemplateColumns: `repeat(${mainCols}, minmax(0, 1fr))` }"
+          >
+            <button
+              v-for="n in mainNums"
+              :key="'m' + t.id + '-' + n"
+              type="button"
+              class="pick-num main"
+              :class="{ on: t.main.includes(n) }"
+              @click="toggleMain(ti, n)"
+            >
+              {{ pad(n) }}
+            </button>
+          </div>
+          <div class="balls pick-selected" v-if="t.main.length">
+            <span v-for="n in t.main" :key="'sm' + t.id + '-' + n" class="ball main">{{
+              pad(n)
+            }}</span>
           </div>
         </div>
       </div>
 
       <div class="panel">
         <div class="panel-hd">
-          <span>对照结果</span>
-          <span>{{ result.issue }}</span>
+          <span>{{ specialLabel }}（≥{{ specialNeed }}）</span>
         </div>
         <div class="panel-bd">
-          <div class="kv">
-            <div class="k">开奖日期</div>
-            <div class="v">{{ result.draw_date }}</div>
-            <div class="k">开奖号码</div>
-            <div class="v">{{ result.draw_formatted }}</div>
-            <div class="k">投注号码</div>
-            <div class="v">{{ result.ticket_formatted }}</div>
-            <div class="k">命中池</div>
-            <div class="v">
-              主区 {{ result.main_hit }}/{{ result.main_selected }} · 特区
-              {{ result.special_hit }}/{{ result.special_selected }}
-            </div>
-            <div class="k">说明</div>
-            <div class="v">{{ result.rule }}</div>
+          <div
+            class="pick-grid"
+            :style="{ gridTemplateColumns: `repeat(${specialCols}, minmax(0, 1fr))` }"
+          >
+            <button
+              v-for="n in specialNums"
+              :key="'s' + t.id + '-' + n"
+              type="button"
+              class="pick-num special"
+              :class="{ on: t.special.includes(n) }"
+              @click="toggleSpecial(ti, n)"
+            >
+              {{ pad(n) }}
+            </button>
+          </div>
+          <div class="balls pick-selected" v-if="t.special.length">
+            <span v-for="n in t.special" :key="'ss' + t.id + '-' + n" class="ball special">{{
+              pad(n)
+            }}</span>
           </div>
         </div>
       </div>
 
-      <div class="panel" v-if="result.levels?.length">
-        <div class="panel-hd"><span>分奖等明细</span><span>官网单注奖金 × 注数</span></div>
-        <div class="panel-bd" style="padding: 0">
-          <table class="data">
-            <thead>
-              <tr>
-                <th>奖等 / 规则</th>
-                <th class="num">单注奖金</th>
-                <th class="num">注数</th>
-                <th class="num">中奖奖金</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="lv in result.levels" :key="lv.prize_level + lv.rule">
-                <td>{{ lv.prize_name }} {{ lv.rule }}</td>
-                <td class="num">{{ formatMoney(lv.unit_prize) }}</td>
-                <td class="num">{{ lv.count }}</td>
-                <td class="num">{{ formatMoney(lv.amount) }}</td>
-              </tr>
-            </tbody>
-          </table>
+      <div class="ticket-actions">
+        <button class="btn" type="button" @click="addTicketAfter(ti)">加一组</button>
+        <button
+          class="btn secondary"
+          type="button"
+          :disabled="tickets.length <= 1"
+          @click="removeTicket(ti)"
+        >
+          删除本组
+        </button>
+      </div>
+    </div>
+
+    <p v-if="error" class="error">{{ error }}</p>
+
+    <template v-if="results && summary">
+      <div class="metric-row">
+        <div class="metric">
+          <div class="label">核验组数</div>
+          <div class="value">{{ summary.ok }}/{{ summary.groups }}</div>
+        </div>
+        <div class="metric">
+          <div class="label">中奖组数</div>
+          <div class="value" :class="summary.won ? 'bid' : 'ask'">{{ summary.won }}</div>
+        </div>
+        <div class="metric">
+          <div class="label">总注数</div>
+          <div class="value">{{ summary.totalBets }}</div>
+        </div>
+        <div class="metric">
+          <div class="label">中奖注数</div>
+          <div class="value" :class="summary.winningBets ? 'bid' : 'ask'">
+            {{ summary.winningBets }}
+          </div>
+        </div>
+        <div class="metric">
+          <div class="label">奖金合计</div>
+          <div class="value" :class="summary.totalPrize ? 'bid' : 'ask'">
+            {{ formatMoney(summary.totalPrize) }}
+          </div>
+        </div>
+      </div>
+
+      <div v-for="r in results" :key="'r' + r.index" class="panel">
+        <div class="panel-hd">
+          <span>第 {{ r.index }} 组结果</span>
+          <span v-if="r.ok && r.data" :class="r.data.won ? 'bid' : 'ask'">
+            {{ r.data.won ? r.data.prize_name : '未中奖' }}
+          </span>
+          <span v-else class="ask">失败</span>
+        </div>
+        <div class="panel-bd">
+          <p v-if="!r.ok" class="error" style="margin: 0">{{ r.error }}</p>
+          <template v-else-if="r.data">
+            <div class="kv">
+              <div class="k">投注号码</div>
+              <div class="v">{{ r.data.ticket_formatted }}</div>
+              <div class="k">开奖号码</div>
+              <div class="v">{{ r.data.draw_formatted }}</div>
+              <div class="k">模式 / 注数</div>
+              <div class="v">
+                {{ r.data.mode === 'single' ? '单式' : '复式' }} · {{ r.data.total_bets }} 注 · 中
+                {{ r.data.winning_bets }} 注
+              </div>
+              <div class="k">命中池</div>
+              <div class="v">
+                主区 {{ r.data.main_hit }}/{{ r.data.main_selected }} · 特区
+                {{ r.data.special_hit }}/{{ r.data.special_selected }}
+              </div>
+              <div class="k">奖金</div>
+              <div class="v">{{ formatMoney(r.data.total_prize) }} · {{ r.data.rule }}</div>
+            </div>
+            <table v-if="r.data.levels?.length" class="data" style="margin-top: 12px">
+              <thead>
+                <tr>
+                  <th>奖等 / 规则</th>
+                  <th class="num">单注奖金</th>
+                  <th class="num">注数</th>
+                  <th class="num">中奖奖金</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="lv in r.data.levels" :key="lv.prize_level + lv.rule">
+                  <td>{{ lv.prize_name }} {{ lv.rule }}</td>
+                  <td class="num">{{ formatMoney(lv.unit_prize) }}</td>
+                  <td class="num">{{ lv.count }}</td>
+                  <td class="num">{{ formatMoney(lv.amount) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </template>
         </div>
       </div>
 
       <div class="note">
-        复式按官方拆解为单式组合计数；单注奖金取自官网当期公告（点「同步最新」可刷新）。
-        规则形如 6+1 / 2+1，表示主区命中 + 特区命中。大乐透自 2026014 期起按新 7 奖级计。
+        未完成选号的组会跳过；完整组按官方规则逐组核对后汇总。复式按组合拆注计费/计奖。
       </div>
     </template>
   </section>
 </template>
+
+<style scoped>
+.ticket-block {
+  margin-bottom: 18px;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed var(--line);
+}
+
+.ticket-block:last-of-type {
+  border-bottom: none;
+}
+
+.ticket-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 4px 0 8px;
+}
+</style>

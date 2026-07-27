@@ -54,7 +54,7 @@ def health() -> HealthResponse:
 @router.get("/draws", response_model=DrawsResponse)
 def draws(
     game: str = Query(..., pattern="^(ssq|dlt)$"),
-    limit: int = Query(20, ge=1, le=200),
+    limit: int = Query(20, ge=1, le=500),
 ) -> DrawsResponse:
     cfg = get_game(game)
     all_draws = load_draws(cfg)
@@ -110,6 +110,16 @@ def analyze(
 def predict(body: PredictRequest) -> PredictResponse:
     cfg = get_game(body.game)
     draws = _ensure_draws(body.game, min_count=5)
+    if body.as_of_issue:
+        idx = next((i for i, d in enumerate(draws) if d.issue == body.as_of_issue), None)
+        if idx is None:
+            raise HTTPException(status_code=404, detail=f"未找到期号: {body.as_of_issue}")
+        draws = draws[: idx + 1]
+        if len(draws) < 5:
+            raise HTTPException(
+                status_code=400,
+                detail=f"截止期号 {body.as_of_issue} 之前历史不足 5 期，无法生成",
+            )
     window_draws = draws[-body.window :] if len(draws) > body.window else draws
     try:
         tickets = generate_tickets(cfg, window_draws, n=body.n, seed=body.seed)
