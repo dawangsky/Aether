@@ -36,6 +36,8 @@ Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $Root "dist/aether-a
   --collect-all uvicorn `
   --collect-all fastapi `
   --collect-submodules pydantic `
+  --hidden-import lottery.ticket `
+  --collect-submodules lottery `
   lottery/api/sidecar.py
 
 $Src = Join-Path $Root "dist/aether-api.exe"
