@@ -34,7 +34,7 @@ button {
 .app-shell {
   height: 100%;
   display: grid;
-  grid-template-rows: 40px 1fr 24px;
+  grid-template-rows: 46px 1fr 24px;
   background:
     linear-gradient(180deg, var(--shell-top) 0%, var(--bg-0) 120px),
     repeating-linear-gradient(
@@ -91,24 +91,49 @@ button {
 
 .ticker {
   display: flex;
-  gap: 18px;
+  align-items: stretch;
+  gap: 0;
   overflow: hidden;
   font-family: var(--mono);
-  font-size: 11px;
-  color: var(--text-dim);
+  min-width: 0;
 }
 
-.ticker span strong {
+.ticker-item {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  padding: 0 14px;
+  border-left: 1px solid color-mix(in srgb, var(--line-strong) 70%, transparent);
+  min-width: 0;
+}
+
+.ticker-item:first-child {
+  border-left: none;
+  padding-left: 4px;
+}
+
+.ticker-k {
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  text-transform: none;
+  line-height: 1.1;
+}
+
+.ticker-v {
+  font-size: 11px;
   color: var(--text);
   font-weight: 500;
-  margin-right: 6px;
+  white-space: nowrap;
+  line-height: 1.2;
 }
 
-.ticker .up {
+.ticker-item.up .ticker-v {
   color: var(--bid);
 }
 
-.ticker .down {
+.ticker-item.down .ticker-v {
   color: var(--ask);
 }
 

@@ -88,12 +88,27 @@ onUnmounted(() => {
         <div class="brand-mark">Aether</div>
         <div class="brand-title">双色球 / 大乐透 · 彩票量化</div>
       </div>
-      <div class="ticker">
-        <span><strong>SSQ</strong> 红6+蓝1</span>
-        <span><strong>DLT</strong> 前5+后2</span>
-        <span><strong>MODE</strong> 研究模式</span>
-        <span class="down"><strong>EDGE</strong> 未验证</span>
-        <span class="up"><strong>DATA</strong> 本地 CSV</span>
+      <div class="ticker" aria-label="运行状态">
+        <div class="ticker-item" title="双色球单式：红球 6 个 + 蓝球 1 个">
+          <span class="ticker-k">双色球</span>
+          <span class="ticker-v">红6+蓝1</span>
+        </div>
+        <div class="ticker-item" title="大乐透单式：前区 5 个 + 后区 2 个">
+          <span class="ticker-k">大乐透</span>
+          <span class="ticker-v">前5+后2</span>
+        </div>
+        <div class="ticker-item" title="仅供研究娱乐，不构成投注建议">
+          <span class="ticker-k">运行模式</span>
+          <span class="ticker-v">研究</span>
+        </div>
+        <div class="ticker-item down" title="尚未验证相对随机是否有超额收益">
+          <span class="ticker-k">Edge</span>
+          <span class="ticker-v">未验证</span>
+        </div>
+        <div class="ticker-item up" title="开奖数据保存在本地 CSV">
+          <span class="ticker-k">数据源</span>
+          <span class="ticker-v">本地 CSV</span>
+        </div>
       </div>
       <div class="conn" :class="connClass">
         <span class="conn-dot" />
