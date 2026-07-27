@@ -15,8 +15,7 @@ const nav = [
   { path: '/ticket', code: '04', label: '下一期选号' },
   { path: '/backtest', code: '05', label: '回测台' },
   { path: '/check', code: '06', label: '中奖核对' },
-  { path: '/themes', code: '07', label: '界面主题' },
-  { path: '/settings', code: '08', label: '设置' }
+  { path: '/settings', code: '07', label: '设置' }
 ]
 
 const route = useRoute()
