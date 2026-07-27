@@ -15,15 +15,20 @@ let apiProcess: ChildProcessWithoutNullStreams | null = null
 let apiReady = false
 let apiError = ''
 let quitting = false
+let startInFlight: Promise<void> | null = null
+
+function statusPayload(extra?: Partial<{ ready: boolean; error: string }>) {
+  return {
+    ready: extra?.ready ?? apiReady,
+    baseUrl: API_BASE,
+    error: extra?.error ?? apiError
+  }
+}
 
 function emitStatus(extra?: Partial<{ ready: boolean; error: string }>) {
   if (quitting || !mainWindow || mainWindow.isDestroyed()) return
   try {
-    mainWindow.webContents.send('api-status', {
-      ready: extra?.ready ?? apiReady,
-      baseUrl: API_BASE,
-      error: extra?.error ?? apiError
-    })
+    mainWindow.webContents.send('api-status', statusPayload(extra))
   } catch {
     // window may be tearing down
   }
@@ -96,6 +101,7 @@ function resolveDevPython(): string {
 async function waitForHealth(timeoutMs = 45000): Promise<boolean> {
   const start = Date.now()
   while (Date.now() - start < timeoutMs) {
+    if (quitting) return false
     try {
       const res = await fetch(`${API_BASE}/health`)
       if (res.ok) return true
@@ -108,6 +114,15 @@ async function waitForHealth(timeoutMs = 45000): Promise<boolean> {
 }
 
 async function startApi(): Promise<void> {
+  if (startInFlight) return startInFlight
+  startInFlight = doStartApi().finally(() => {
+    startInFlight = null
+  })
+  return startInFlight
+}
+
+async function doStartApi(): Promise<void> {
+  if (quitting) return
   apiError = ''
   emitStatus({ ready: false, error: '正在启动本地 API…' })
   ensureData()
@@ -156,6 +171,7 @@ async function startApi(): Promise<void> {
   apiProcess.on('error', (err) => {
     apiError = `启动 API 失败: ${err.message}`
     apiReady = false
+    apiProcess = null
     emitStatus()
   })
   apiProcess.stderr?.on('data', (buf) => {
@@ -165,24 +181,32 @@ async function startApi(): Promise<void> {
     }
   })
   apiProcess.on('exit', (code) => {
-    if (!apiReady) {
-      apiError = apiError || `API 进程退出，code=${code}`
-      emitStatus()
-    }
     apiProcess = null
     apiReady = false
+    if (!quitting) {
+      apiError = apiError || (code == null ? 'API 已停止' : `API 进程退出，code=${code}`)
+      emitStatus()
+    }
   })
 
   const ok = await waitForHealth()
+  if (quitting) return
   apiReady = ok
   apiError = ok
     ? ''
-    : apiError || `无法连接 ${API_BASE}/health。请重启应用；若仍失败请反馈日志。`
+    : apiError || `无法连接 ${API_BASE}/health。可点击右上角「启动」重试。`
   emitStatus()
 }
 
-function stopApi(): void {
-  if (!apiProcess) return
+function stopApi(manual = false): void {
+  if (!apiProcess) {
+    apiReady = false
+    if (manual) {
+      apiError = 'API 已关闭'
+      emitStatus()
+    }
+    return
+  }
   const proc = apiProcess
   apiProcess = null
   apiReady = false
@@ -192,6 +216,10 @@ function stopApi(): void {
     proc.kill('SIGTERM')
   } catch {
     // already exiting
+  }
+  if (manual && !quitting) {
+    apiError = 'API 已关闭'
+    emitStatus()
   }
 }
 
@@ -233,24 +261,41 @@ app.whenReady().then(() => {
     ...(iconPath ? { iconPath } : {})
   })
 
-  ipcMain.handle('get-api-status', () => ({
-    ready: apiReady,
-    baseUrl: API_BASE,
-    error: apiError
-  }))
+  ipcMain.handle('get-api-status', () => statusPayload())
+  ipcMain.handle('start-api', async () => {
+    await startApi()
+    return statusPayload()
+  })
+  ipcMain.handle('stop-api', async () => {
+    stopApi(true)
+    // wait briefly so port frees if user restarts immediately
+    await new Promise((r) => setTimeout(r, 300))
+    return statusPayload()
+  })
 
   createWindow()
   void startApi()
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow()
+    }
+    // 关掉窗口后再打开：确保 API 被重新拉起
+    if (!apiReady && !apiProcess) {
+      void startApi()
+    } else {
+      emitStatus()
+    }
   })
 })
 
 app.on('window-all-closed', () => {
-  quitting = true
-  stopApi()
-  if (process.platform !== 'darwin') app.quit()
+  // macOS 关闭窗口不退出应用，也不要停掉 API；仅非 darwin 退出。
+  if (process.platform !== 'darwin') {
+    quitting = true
+    stopApi()
+    app.quit()
+  }
 })
 
 app.on('before-quit', () => {

@@ -8,6 +8,8 @@ export type ApiStatus = {
 
 contextBridge.exposeInMainWorld('lotteryDesktop', {
   getApiStatus: (): Promise<ApiStatus> => ipcRenderer.invoke('get-api-status'),
+  startApi: (): Promise<ApiStatus> => ipcRenderer.invoke('start-api'),
+  stopApi: (): Promise<ApiStatus> => ipcRenderer.invoke('stop-api'),
   onApiStatus: (cb: (status: ApiStatus) => void) => {
     const listener = (_: unknown, status: ApiStatus) => cb(status)
     ipcRenderer.on('api-status', listener)

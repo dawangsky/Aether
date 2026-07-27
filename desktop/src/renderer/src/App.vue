@@ -20,6 +20,7 @@ const route = useRoute()
 const router = useRouter()
 const status = ref<ApiStatus>({ ready: false, baseUrl: getApiBaseUrl(), error: '' })
 const clock = ref('')
+const apiBusy = ref(false)
 let off: (() => void) | undefined
 let timer: number | undefined
 
@@ -28,10 +29,35 @@ const connClass = computed(() => ({
   ok: status.value.ready,
   bad: !status.value.ready && !!status.value.error
 }))
+const apiToggleLabel = computed(() => (status.value.ready ? '关闭服务' : '启动服务'))
+const hasDesktopBridge = computed(() => !!window.lotteryDesktop)
 
 function tick() {
   const d = new Date()
   clock.value = d.toLocaleString('zh-CN', { hour12: false })
+}
+
+function applyStatus(s: ApiStatus) {
+  status.value = s
+  setApiBaseUrl(s.baseUrl)
+}
+
+async function toggleApi() {
+  const bridge = window.lotteryDesktop
+  if (!bridge || apiBusy.value) return
+  apiBusy.value = true
+  try {
+    const next = status.value.ready ? await bridge.stopApi() : await bridge.startApi()
+    applyStatus(next)
+  } catch (e) {
+    status.value = {
+      ...status.value,
+      ready: false,
+      error: e instanceof Error ? e.message : String(e)
+    }
+  } finally {
+    apiBusy.value = false
+  }
 }
 
 onMounted(async () => {
@@ -40,13 +66,8 @@ onMounted(async () => {
   timer = window.setInterval(tick, 1000)
   const bridge = window.lotteryDesktop
   if (bridge) {
-    const s = await bridge.getApiStatus()
-    status.value = s
-    setApiBaseUrl(s.baseUrl)
-    off = bridge.onApiStatus((next) => {
-      status.value = next
-      setApiBaseUrl(next.baseUrl)
-    })
+    applyStatus(await bridge.getApiStatus())
+    off = bridge.onApiStatus(applyStatus)
   } else {
     status.value = { ready: true, baseUrl: getApiBaseUrl(), error: '' }
   }
@@ -76,6 +97,15 @@ onUnmounted(() => {
       <div class="conn" :class="connClass">
         <span class="conn-dot" />
         <span>{{ readyText }}</span>
+        <button
+          class="api-toggle"
+          type="button"
+          :disabled="apiBusy || !hasDesktopBridge"
+          :title="status.error || (status.ready ? '停止本地 FastAPI' : '启动本地 FastAPI')"
+          @click="toggleApi"
+        >
+          {{ apiBusy ? '…' : apiToggleLabel }}
+        </button>
         <span>{{ clock }}</span>
       </div>
     </header>

@@ -137,6 +137,29 @@ button {
   background: var(--ask);
 }
 
+.api-toggle {
+  appearance: none;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  padding: 3px 8px;
+  cursor: pointer;
+  line-height: 1.2;
+}
+
+.api-toggle:hover:not(:disabled) {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
+.api-toggle:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 /* —— Body：左导航 + 主区 —— */
 .workspace {
   display: grid;

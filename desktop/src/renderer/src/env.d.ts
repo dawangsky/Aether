@@ -4,6 +4,8 @@ type ApiStatus = { ready: boolean; baseUrl: string; error: string }
 
 interface LotteryDesktopBridge {
   getApiStatus: () => Promise<ApiStatus>
+  startApi: () => Promise<ApiStatus>
+  stopApi: () => Promise<ApiStatus>
   onApiStatus: (cb: (status: ApiStatus) => void) => () => void
 }
 
