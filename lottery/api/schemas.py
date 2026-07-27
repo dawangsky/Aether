@@ -129,7 +129,6 @@ class TicketPlanRequest(BaseModel):
         default=None, description="复式特区个数；单式可省略，按彩种默认"
     )
     window: int = Field(default=50, ge=10, le=200)
-    seed: int | None = 42
 
 
 class TicketQuoteRequest(BaseModel):
@@ -141,6 +140,7 @@ class TicketQuoteRequest(BaseModel):
 class TicketPlanResponse(BaseModel):
     game: GameKey
     mode: str
+    method: str = "top_weight"
     main: list[int]
     special: list[int]
     formatted: str
@@ -152,3 +152,5 @@ class TicketPlanResponse(BaseModel):
     last_issue: str | None = None
     main_count: int
     special_count: int
+    main_scores: dict[str, float] | None = None
+    special_scores: dict[str, float] | None = None

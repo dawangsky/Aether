@@ -210,7 +210,6 @@ def ticket_plan(body: TicketPlanRequest) -> TicketPlanResponse:
             window_draws,
             main_count=main_count,
             special_count=special_count,
-            seed=body.seed,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

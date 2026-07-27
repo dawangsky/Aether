@@ -66,7 +66,6 @@ export const api = {
     main_count?: number | null
     special_count?: number | null
     window?: number
-    seed?: number | null
   }) => request<any>('/ticket/plan', { method: 'POST', body: JSON.stringify(body) }),
   ticketQuote: (body: { game: GameKey; main: number[]; special: number[] }) =>
     request<any>('/ticket/quote', { method: 'POST', body: JSON.stringify(body) })

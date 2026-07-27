@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 from math import comb
-from typing import Any
+from typing import Any, Sequence
 
 from lottery.config import GameConfig
 from lottery.models import Draw
 from lottery.predict.constraints import main_weights, special_weights
-from lottery.predict.generator import _weighted_sample
-import random
 
 PRICE_PER_BET = 2  # 人民币元 / 注
 
@@ -43,15 +41,20 @@ def ticket_cost(cfg: GameConfig, main_count: int, special_count: int) -> dict[st
     }
 
 
+def _top_by_weight(pool: Sequence[int], weights: dict[int, float], k: int) -> list[int]:
+    """按权重降序取前 k；同分按号码升序，保证同一数据下结果确定。"""
+    ranked = sorted(pool, key=lambda n: (-float(weights.get(n, 0.0)), n))
+    return ranked[:k]
+
+
 def generate_pool(
     cfg: GameConfig,
     draws: list[Draw],
     *,
     main_count: int | None = None,
     special_count: int | None = None,
-    seed: int | None = None,
 ) -> dict[str, Any]:
-    """按权重采样一组选号池（单式或复式）。"""
+    """按因子权重取 Top-K 选号池（确定性推荐，非随机抽样）。"""
     if len(draws) < 5:
         raise ValueError("历史数据不足，请先同步开奖数据")
 
@@ -59,16 +62,18 @@ def generate_pool(
     s = cfg.special_count if special_count is None else special_count
     validate_counts(cfg, m, s)
 
-    rng = random.Random(seed)
     mw = main_weights(cfg, draws)
     sw = special_weights(cfg, draws)
-    main = tuple(sorted(_weighted_sample(list(cfg.main_range), mw, m, rng)))
-    special = tuple(sorted(_weighted_sample(list(cfg.special_range), sw, s, rng)))
+    main = tuple(sorted(_top_by_weight(list(cfg.main_range), mw, m)))
+    special = tuple(sorted(_top_by_weight(list(cfg.special_range), sw, s)))
     quote = ticket_cost(cfg, m, s)
     return {
         "game": cfg.key,
+        "method": "top_weight",
         "main": list(main),
         "special": list(special),
+        "main_scores": {str(n): round(float(mw.get(n, 0.0)), 4) for n in main},
+        "special_scores": {str(n): round(float(sw.get(n, 0.0)), 4) for n in special},
         "formatted": " ".join(f"{n:02d}" for n in main)
         + " + "
         + " ".join(f"{n:02d}" for n in special),

@@ -11,7 +11,6 @@ const betMode = ref<BetMode>('single')
 const mainCount = ref(7)
 const specialCount = ref(1)
 const windowSize = ref(50)
-const seed = ref<number | null>(42)
 
 const selectedMain = ref<number[]>([])
 const selectedSpecial = ref<number[]>([])
@@ -171,8 +170,7 @@ async function generateRecommend() {
       mode: betMode.value,
       main_count: betMode.value === 'compound' ? mainCount.value : null,
       special_count: betMode.value === 'compound' ? specialCount.value : null,
-      window: windowSize.value,
-      seed: seed.value
+      window: windowSize.value
     })
     plan.value = data
     selectedMain.value = [...data.main]
@@ -226,7 +224,7 @@ watch(source, () => {
     <div class="page-head">
       <div>
         <h1>下一期选号</h1>
-        <p class="lead">单式 / 复式推荐 · 手选 · 实时估算注数与费用</p>
+        <p class="lead">按因子权重取优 · 单式 / 复式 · 手选计费（非随机抽样）</p>
       </div>
       <div class="panel-id">TICKET</div>
     </div>
@@ -273,12 +271,8 @@ watch(source, () => {
           Window
           <input v-model.number="windowSize" type="number" min="10" max="200" />
         </label>
-        <label class="field">
-          Seed
-          <input v-model.number="seed" type="number" />
-        </label>
         <button class="btn" :disabled="loading || !canRecommend" @click="generateRecommend">
-          生成号码
+          生成推荐
         </button>
       </template>
       <template v-else>
@@ -399,18 +393,36 @@ watch(source, () => {
           <div class="kv">
             <div class="k">号码</div>
             <div class="v">{{ plan.formatted }}</div>
+            <div class="k">推荐方式</div>
+            <div class="v">因子权重 Top-K（同窗口同数据结果固定）</div>
             <div class="k">拆注公式</div>
             <div class="v">{{ plan.unit_bets }} = {{ plan.bets }} 注</div>
             <div class="k">费用</div>
             <div class="v">{{ plan.cost }} 元（{{ plan.price_per_bet }} 元/注）</div>
             <div class="k" v-if="plan.last_issue">参考期号</div>
             <div class="v" v-if="plan.last_issue">{{ plan.last_issue }}</div>
+            <div class="k" v-if="plan.main_scores">主区得分</div>
+            <div class="v" v-if="plan.main_scores">
+              {{
+                Object.entries(plan.main_scores)
+                  .map(([n, s]) => `${String(n).padStart(2, '0')}(${s})`)
+                  .join(' ')
+              }}
+            </div>
+            <div class="k" v-if="plan.special_scores">特区得分</div>
+            <div class="v" v-if="plan.special_scores">
+              {{
+                Object.entries(plan.special_scores)
+                  .map(([n, s]) => `${String(n).padStart(2, '0')}(${s})`)
+                  .join(' ')
+              }}
+            </div>
           </div>
         </div>
       </div>
       <div class="note">
-        推荐号码基于历史权重约束采样，仅供研究娱乐；开奖近乎随机，不构成投注建议。单式为标准
-        {{ mainNeed }}+{{ specialNeed }}；复式按组合数计费。
+        推荐按窗口内频率/遗漏等因子权重排序取号，同一数据下重复点击结果不变；数据或窗口变化后结论才会变。
+        仅供研究娱乐，开奖近乎随机，不构成投注建议。单式为标准 {{ mainNeed }}+{{ specialNeed }}；复式按组合数计费。
       </div>
     </template>
   </section>
