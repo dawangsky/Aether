@@ -162,3 +162,4 @@ class TicketPlanResponse(BaseModel):
     special_count: int
     main_scores: dict[str, float] | None = None
     special_scores: dict[str, float] | None = None
+    strategy: dict[str, Any] | None = None

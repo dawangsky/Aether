@@ -29,9 +29,16 @@ def _weighted_sample(pool: Sequence[int], weights: dict[int, float], k: int, rng
     return chosen
 
 
-def _passes(cfg: GameConfig, main: list[int], cons: PredictConstraints, bands: dict[int, str]) -> bool:
+def _passes(
+    cfg: GameConfig,
+    main: list[int],
+    cons: PredictConstraints,
+    bands: dict[int, str],
+    *,
+    prev_main: tuple[int, ...] | None = None,
+) -> bool:
     nums = tuple(sorted(main))
-    pat = analyze_main(cfg, nums)
+    pat = analyze_main(cfg, nums, prev_main=prev_main)
     if not (cons.sum_lo <= pat.sum_value <= cons.sum_hi):
         return False
     if not (cons.odd_min <= pat.odd_even[0] <= cons.odd_max):
@@ -42,6 +49,15 @@ def _passes(cfg: GameConfig, main: list[int], cons: PredictConstraints, bands: d
         return False
     if not (cons.consec_min <= pat.consecutive_groups <= cons.consec_max):
         return False
+    if not (cons.span_lo <= pat.span <= cons.span_hi):
+        return False
+    if max(pat.mod3) > cons.mod3_max_single:
+        return False
+    if prev_main is not None:
+        if not (cons.repeats_min <= pat.repeats <= cons.repeats_max):
+            return False
+        if not (cons.neighbors_min <= pat.neighbors <= cons.neighbors_max):
+            return False
     hot = sum(1 for n in nums if bands.get(n) in ("0-2", "3-4"))
     cold = sum(1 for n in nums if bands.get(n) in (">=8",))
     if not (cons.hot_band_min <= hot <= cons.hot_band_max):
@@ -76,7 +92,7 @@ def generate_tickets(
     while len(tickets) < n and tries < max_tries:
         tries += 1
         main = _weighted_sample(list(cfg.main_range), mw, cfg.main_count, rng)
-        if not _passes(cfg, main, cons, bands):
+        if not _passes(cfg, main, cons, bands, prev_main=prev):
             continue
         key = tuple(sorted(main))
         if key in seen:
@@ -91,19 +107,22 @@ def generate_tickets(
                 main=key,
                 special=special,
                 meta={
+                    "strategy": "expert_v1",
                     "sum": pat.sum_value,
+                    "span": pat.span,
                     "odd_even": f"{pat.odd_even[0]}:{pat.odd_even[1]}",
                     "big_small": f"{pat.big_small[0]}:{pat.big_small[1]}",
                     "zones": f"{pat.zones[0]}:{pat.zones[1]}:{pat.zones[2]}",
+                    "mod3": f"{pat.mod3[0]}:{pat.mod3[1]}:{pat.mod3[2]}",
                     "bands": ",".join(f"{k}:{v}" for k, v in band_counts.items()),
                     "consec": pat.consecutive_groups,
                     "repeats": pat.repeats,
+                    "neighbors": pat.neighbors,
                 },
             )
         )
         seen.add(key)
 
-    # 约束过严时放宽重试
     if len(tickets) < n:
         loose = PredictConstraints(
             sum_lo=cons.sum_lo - 20,
@@ -120,11 +139,18 @@ def generate_tickets(
             cold_band_min=0,
             cold_band_max=cfg.main_count,
             prefer_rebalance_empty_zone=False,
+            span_lo=max(0, cons.span_lo - 8),
+            span_hi=cons.span_hi + 8,
+            repeats_min=0,
+            repeats_max=cfg.main_count,
+            neighbors_min=0,
+            neighbors_max=cfg.main_count,
+            mod3_max_single=cfg.main_count,
         )
         while len(tickets) < n and tries < max_tries * 2:
             tries += 1
             main = _weighted_sample(list(cfg.main_range), mw, cfg.main_count, rng)
-            if not _passes(cfg, main, loose, bands):
+            if not _passes(cfg, main, loose, bands, prev_main=prev):
                 continue
             key = tuple(sorted(main))
             if key in seen:
@@ -139,13 +165,17 @@ def generate_tickets(
                     main=key,
                     special=special,
                     meta={
+                        "strategy": "expert_v1",
                         "sum": pat.sum_value,
+                        "span": pat.span,
                         "odd_even": f"{pat.odd_even[0]}:{pat.odd_even[1]}",
                         "big_small": f"{pat.big_small[0]}:{pat.big_small[1]}",
                         "zones": f"{pat.zones[0]}:{pat.zones[1]}:{pat.zones[2]}",
+                        "mod3": f"{pat.mod3[0]}:{pat.mod3[1]}:{pat.mod3[2]}",
                         "bands": ",".join(f"{k}:{v}" for k, v in band_counts.items()),
                         "consec": pat.consecutive_groups,
                         "repeats": pat.repeats,
+                        "neighbors": pat.neighbors,
                         "relaxed": True,
                     },
                 )

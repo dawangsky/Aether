@@ -188,12 +188,20 @@ onMounted(() => {
             }}</span>
           </div>
           <div class="kv">
+            <div class="k">策略</div>
+            <div class="v">{{ t.meta.strategy || 'expert_v1' }}</div>
             <div class="k">奇偶</div>
             <div class="v">{{ t.meta.odd_even }}</div>
             <div class="k">大小</div>
             <div class="v">{{ t.meta.big_small }}</div>
             <div class="k">三区</div>
             <div class="v">{{ t.meta.zones }}</div>
+            <div class="k">012路</div>
+            <div class="v">{{ t.meta.mod3 || '—' }}</div>
+            <div class="k">和值/跨度</div>
+            <div class="v">{{ t.meta.sum }} / {{ t.meta.span ?? '—' }}</div>
+            <div class="k">重号/邻号</div>
+            <div class="v">{{ t.meta.repeats ?? 0 }} / {{ t.meta.neighbors ?? 0 }}</div>
             <div class="k">遗漏层</div>
             <div class="v">{{ t.meta.bands }}</div>
           </div>

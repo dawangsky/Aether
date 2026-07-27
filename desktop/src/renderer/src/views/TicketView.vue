@@ -224,7 +224,7 @@ watch(source, () => {
     <div class="page-head">
       <div>
         <h1>下一期选号</h1>
-        <p class="lead">按因子权重取优 · 单式 / 复式 · 手选计费（非随机抽样）</p>
+        <p class="lead">按专家形态因子加权分层配号 · 单式 / 复式 · 实时估算费用</p>
       </div>
       <div class="panel-id">TICKET</div>
     </div>
@@ -394,7 +394,13 @@ watch(source, () => {
             <div class="k">号码</div>
             <div class="v">{{ plan.formatted }}</div>
             <div class="k">推荐方式</div>
-            <div class="v">因子权重 Top-K（同窗口同数据结果固定）</div>
+            <div class="v">
+              {{ plan.strategy?.label || '专家形态加权 + 分层配号' }}（{{ plan.method }}）
+            </div>
+            <div class="k" v-if="plan.strategy?.notes?.length">因子</div>
+            <div class="v" v-if="plan.strategy?.notes?.length">
+              {{ plan.strategy.notes.join(' · ') }}
+            </div>
             <div class="k">拆注公式</div>
             <div class="v">{{ plan.unit_bets }} = {{ plan.bets }} 注</div>
             <div class="k">费用</div>
@@ -421,7 +427,7 @@ watch(source, () => {
         </div>
       </div>
       <div class="note">
-        推荐按窗口内频率/遗漏等因子权重排序取号，同一数据下重复点击结果不变；数据或窗口变化后结论才会变。
+        策略融合常见专家维度：多窗冷热、遗漏回补、重号邻号、空区/012 路、热温冷分层配号。同一窗口数据下结果确定。
         仅供研究娱乐，开奖近乎随机，不构成投注建议。单式为标准 {{ mainNeed }}+{{ specialNeed }}；复式按组合数计费。
       </div>
     </template>
